@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Minus, X, Maximize2, Settings, ArrowLeft } from 'lucide-react';
+import { Minus, X, Maximize2, Settings, ArrowLeft, Shield, LogOut, Coins } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Moon, Sun, Languages } from 'lucide-react';
 import { useThemeStore } from '@/stores/themeStore';
 import { useProjectStore } from '@/stores/projectStore';
+import { useAuthStore } from '@/stores/authStore';
 import { isDesktopPlatform, getDesktopWindow } from '@/lib/platform';
 import closeNormalIcon from '@/assets/macos-traffic-lights/1-close-1-normal.svg';
 import closeHoverIcon from '@/assets/macos-traffic-lights/2-close-2-hover.svg';
@@ -16,14 +17,19 @@ type AppWindowRef = Awaited<ReturnType<typeof getDesktopWindow>> | null;
 
 interface TitleBarProps {
   onSettingsClick: () => void;
+  onAdminClick?: () => void;
   showBackButton?: boolean;
   onBackClick?: () => void;
 }
 
-export function TitleBar({ onSettingsClick, showBackButton, onBackClick }: TitleBarProps) {
+export function TitleBar({ onSettingsClick, onAdminClick, showBackButton, onBackClick }: TitleBarProps) {
   const { t, i18n } = useTranslation();
   const { theme, toggleTheme } = useThemeStore();
   const currentProjectName = useProjectStore((state) => state.currentProject?.name);
+  const authUser = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const logout = useAuthStore((state) => state.logout);
+  const isWeb = !isDesktopPlatform();
 
   const appWindowRef = useRef<AppWindowRef>(null);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -180,6 +186,39 @@ export function TitleBar({ onSettingsClick, showBackButton, onBackClick }: Title
         >
           <Settings className="w-4 h-4 text-text-muted" />
         </button>
+
+        {isWeb && isAuthenticated && authUser && (
+          <>
+            <div className="h-full flex items-center gap-1.5 px-2.5 text-xs text-text-muted" data-no-drag="true">
+              <Coins className="w-3.5 h-3.5 text-amber-400" />
+              <span className="font-mono text-text-dark">{authUser.credits}</span>
+            </div>
+
+            {authUser.role === 'admin' && onAdminClick && (
+              <button
+                type="button"
+                onClick={onAdminClick}
+                className="h-full px-3 hover:bg-bg-dark transition-colors"
+                title={t('admin.title')}
+              >
+                <Shield className="w-4 h-4 text-accent" />
+              </button>
+            )}
+
+            <div className="h-full flex items-center gap-1.5 px-2.5 text-xs text-text-muted">
+              <span className="text-text-dark">{authUser.username}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={logout}
+              className="h-full px-3 hover:bg-bg-dark transition-colors"
+              title={t('auth.logout')}
+            >
+              <LogOut className="w-4 h-4 text-text-muted" />
+            </button>
+          </>
+        )}
 
         {isDesktop && !isMac ? (
           <>

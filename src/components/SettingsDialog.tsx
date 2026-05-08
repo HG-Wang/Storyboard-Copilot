@@ -8,6 +8,7 @@ import {
   getDesktopAppVersion,
   openDesktopFileDialog,
   openUrlSafe,
+  isDesktopPlatform,
 } from '@/lib/platform';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { UiCheckbox, UiSelect } from '@/components/ui';
@@ -89,6 +90,8 @@ export function SettingsDialog({
   onCheckUpdate,
 }: SettingsDialogProps) {
   const { t, i18n } = useTranslation();
+  const isWeb = !isDesktopPlatform();
+  const showProviderSettings = !isWeb;
   const {
     apiKeys,
     grsaiNanoBananaProModel,
@@ -242,6 +245,12 @@ export function SettingsDialog({
 
     setActiveCategory(initialCategory);
   }, [initialCategory, isOpen]);
+
+  useEffect(() => {
+    if (!showProviderSettings && (activeCategory === 'providers' || activeCategory === 'pricing')) {
+      setActiveCategory('general');
+    }
+  }, [showProviderSettings, activeCategory]);
 
   const handleSave = useCallback(() => {
     providers.forEach((provider) => {
@@ -407,19 +416,21 @@ export function SettingsDialog({
                 <span className="text-sm">{t('settings.general')}</span>
               </button>
 
-              <button
-                onClick={() => setActiveCategory('providers')}
-                className={`
-                w-full flex items-center gap-3 px-4 py-2.5 text-left
-                transition-colors
-                ${activeCategory === 'providers'
-                    ? 'bg-accent/10 text-text-dark border-l-2 border-accent'
-                    : 'text-text-muted hover:bg-bg-dark hover:text-text-dark'
-                  }
-              `}
-              >
-                <span className="text-sm">{t('settings.providers')}</span>
-              </button>
+              {showProviderSettings && (
+                <button
+                  onClick={() => setActiveCategory('providers')}
+                  className={`
+                  w-full flex items-center gap-3 px-4 py-2.5 text-left
+                  transition-colors
+                  ${activeCategory === 'providers'
+                      ? 'bg-accent/10 text-text-dark border-l-2 border-accent'
+                      : 'text-text-muted hover:bg-bg-dark hover:text-text-dark'
+                    }
+                `}
+                >
+                  <span className="text-sm">{t('settings.providers')}</span>
+                </button>
+              )}
 
               <button
                 onClick={() => setActiveCategory('appearance')}
@@ -435,19 +446,21 @@ export function SettingsDialog({
                 <span className="text-sm">{t('settings.appearance')}</span>
               </button>
 
-              <button
-                onClick={() => setActiveCategory('pricing')}
-                className={`
-                w-full flex items-center gap-3 px-4 py-2.5 text-left
-                transition-colors
-                ${activeCategory === 'pricing'
-                    ? 'bg-accent/10 text-text-dark border-l-2 border-accent'
-                    : 'text-text-muted hover:bg-bg-dark hover:text-text-dark'
-                  }
-              `}
-              >
-                <span className="text-sm">{t('settings.pricing')}</span>
-              </button>
+              {showProviderSettings && (
+                <button
+                  onClick={() => setActiveCategory('pricing')}
+                  className={`
+                  w-full flex items-center gap-3 px-4 py-2.5 text-left
+                  transition-colors
+                  ${activeCategory === 'pricing'
+                      ? 'bg-accent/10 text-text-dark border-l-2 border-accent'
+                      : 'text-text-muted hover:bg-bg-dark hover:text-text-dark'
+                    }
+                `}
+                >
+                  <span className="text-sm">{t('settings.pricing')}</span>
+                </button>
+              )}
 
               <button
                 onClick={() => setActiveCategory('experimental')}
@@ -1121,7 +1134,7 @@ export function SettingsDialog({
             )}
           </div>
         </div>
-        {activeCategory === 'providers' && !hideProviderGuidePopover && (
+        {showProviderSettings && activeCategory === 'providers' && !hideProviderGuidePopover && (
           <div
             className={`absolute top-0 bottom-0 left-[calc(50%+366px)] right-0 min-w-[240px] max-w-[380px] rounded-lg border border-border-dark bg-surface-dark/95 p-3 shadow-xl transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
           >

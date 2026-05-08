@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SlidersHorizontal, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { isDesktopPlatform } from '@/lib/platform';
 
 import { AUTO_REQUEST_ASPECT_RATIO } from '@/features/canvas/domain/canvasNodes';
 import {
@@ -483,11 +484,13 @@ export const ModelParamsControls = memo(({
                           }`}
                         onClick={(event) => {
                           event.stopPropagation();
-                          const providerApiKey = (apiKeys[provider.id] ?? '').trim();
-                          if (!providerApiKey) {
-                            setOpenPanel(null);
-                            setMissingKeyProviderName(provider.label || provider.name);
-                            return;
+                          if (isDesktopPlatform()) {
+                            const providerApiKey = (apiKeys[provider.id] ?? '').trim();
+                            if (!providerApiKey) {
+                              setOpenPanel(null);
+                              setMissingKeyProviderName(provider.label || provider.name);
+                              return;
+                            }
                           }
                           if (provider.id !== panelProviderId) {
                             const firstModel = imageModels.find((model) => model.providerId === provider.id);

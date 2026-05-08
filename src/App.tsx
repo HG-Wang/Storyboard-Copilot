@@ -6,10 +6,14 @@ import { SettingsDialog } from './components/SettingsDialog';
 import { UpdateAvailableDialog, type UpdateIgnoreMode } from './components/UpdateAvailableDialog';
 import { GlobalErrorDialog } from './components/GlobalErrorDialog';
 import { ProjectManager } from './features/project/ProjectManager';
+import { AuthPage } from './features/auth/AuthPage';
+import { AdminPage } from './features/admin/AdminPage';
 import { useThemeStore } from './stores/themeStore';
 import { useProjectStore } from './stores/projectStore';
 import { useSettingsStore } from './stores/settingsStore';
+import { useAuthStore } from './stores/authStore';
 import { isDesktopPlatform } from '@/lib/platform';
+import { useServerModelStore } from '@/features/canvas/models/serverModelStore';
 import {
   checkForUpdate,
   isUpdateVersionSuppressed,
@@ -49,11 +53,20 @@ function App() {
   const [latestVersion, setLatestVersion] = useState<string>('');
   const [currentVersion, setCurrentVersion] = useState<string>('');
   const [globalError, setGlobalError] = useState<GlobalErrorDialogDetail | null>(null);
+  const [showAdmin, setShowAdmin] = useState(false);
 
   const isHydrated = useProjectStore((state) => state.isHydrated);
   const hydrate = useProjectStore((state) => state.hydrate);
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
   const closeProject = useProjectStore((state) => state.closeProject);
+
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const loadFromStorage = useAuthStore((state) => state.loadFromStorage);
+  const isWeb = !isDesktopPlatform();
+
+  useEffect(() => {
+    loadFromStorage();
+  }, [loadFromStorage]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -87,6 +100,12 @@ function App() {
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    if (isWeb && isAuthenticated) {
+      void useServerModelStore.getState().load();
+    }
+  }, [isWeb, isAuthenticated]);
 
   useEffect(() => {
     const unsubscribe = subscribeOpenGlobalErrorDialog((detail) => {
@@ -205,6 +224,14 @@ function App() {
     );
   }
 
+  if (isWeb && !isAuthenticated) {
+    return (
+      <ReactFlowProvider>
+        <AuthPage onLoginSuccess={() => void hydrate()} />
+      </ReactFlowProvider>
+    );
+  }
+
   return (
     <ReactFlowProvider>
       <div className="w-full h-full flex flex-col bg-bg-dark">
@@ -213,6 +240,7 @@ function App() {
             setSettingsInitialCategory('general');
             setShowSettings(true);
           }}
+          onAdminClick={() => setShowAdmin(true)}
           showBackButton={!!currentProjectId}
           onBackClick={closeProject}
         />
@@ -241,6 +269,10 @@ function App() {
           details={globalError?.details}
           copyText={globalError?.copyText}
           onClose={() => setGlobalError(null)}
+        />
+        <AdminPage
+          isOpen={showAdmin}
+          onClose={() => setShowAdmin(false)}
         />
       </div>
     </ReactFlowProvider>

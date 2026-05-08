@@ -60,6 +60,8 @@ import {
   resolveImageModelResolution,
   resolveImageModelResolutions,
 } from '@/features/canvas/models';
+import { useServerModelStore } from '@/features/canvas/models/serverModelStore';
+import { isDesktopPlatform } from '@/lib/platform';
 import { GRSAI_NANO_BANANA_PRO_MODEL_ID } from '@/features/canvas/models/image/grsai/nanoBananaPro';
 import { FAL_NANO_BANANA_2_MODEL_ID } from '@/features/canvas/models/image/fal/nanoBanana2';
 import { KIE_NANO_BANANA_2_MODEL_ID } from '@/features/canvas/models/image/kie/nanoBanana2';
@@ -615,7 +617,8 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     [incomingImageItems]
   );
 
-  const imageModels = useMemo(() => listImageModels(), []);
+  const serverModelsLoaded = useServerModelStore((s) => s.loaded);
+  const imageModels = useMemo(() => listImageModels(), [serverModelsLoaded]);
 
   const selectedModel = useMemo(() => {
     const modelId = nodeData.model ?? DEFAULT_IMAGE_MODEL_ID;
@@ -1058,7 +1061,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       return;
     }
 
-    if (!providerApiKey) {
+    if (isDesktopPlatform() && !providerApiKey) {
       const errorMessage = '请在设置中填写 API Key';
       setError(errorMessage);
       void showErrorDialog(errorMessage, '错误');

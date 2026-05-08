@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, FolderOpen, Pencil, Trash2 } from 'lucide-react';
 import { useProjectStore } from '@/stores/projectStore';
 import { getConfiguredApiKeyCount, useSettingsStore } from '@/stores/settingsStore';
+import { isDesktopPlatform } from '@/lib/platform';
 import { UI_CONTENT_OVERLAY_INSET_CLASS } from '@/components/ui/motion';
 import { UiButton, UiSelect } from '@/components/ui/primitives';
 import { MissingApiKeyHint } from '@/features/settings/MissingApiKeyHint';
@@ -21,7 +22,7 @@ export function ProjectManager() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const providerIds = useMemo(() => listModelProviders().map((provider) => provider.id), []);
   const configuredApiKeyCount = useSettingsStore((state) =>
-    getConfiguredApiKeyCount(state.apiKeys, providerIds)
+    isDesktopPlatform() ? getConfiguredApiKeyCount(state.apiKeys, providerIds) : 1
   );
 
   const { projects, isOpeningProject, createProject, deleteProject, renameProject, openProject } =

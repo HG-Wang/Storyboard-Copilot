@@ -1,5 +1,6 @@
 import { isDesktopPlatform } from '@/lib/platform';
 import { getBackendBaseUrl } from '@/lib/backendUrl';
+import { useAuthStore } from '@/stores/authStore';
 
 let _tauriInvoke: (<T>(cmd: string, args?: Record<string, unknown>) => Promise<T>) | null = null;
 
@@ -17,11 +18,23 @@ export async function invoke<T = unknown>(command: string, args?: Record<string,
   }
 
   const baseUrl = getBackendBaseUrl();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+  const token = useAuthStore.getState().token;
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${baseUrl}/api/${command}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(args ?? {}),
   });
+
+  if (response.status === 401) {
+    useAuthStore.getState().logout();
+    throw new Error('登录已过期，请重新登录');
+  }
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'Unknown error');

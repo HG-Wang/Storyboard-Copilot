@@ -4,6 +4,8 @@ import type {
   ModelProviderDefinition,
   ResolutionOption,
 } from './types';
+import { useServerModelStore } from './serverModelStore';
+import { isDesktopPlatform } from '@/lib/platform';
 
 const providerModules = import.meta.glob<{ provider: ModelProviderDefinition }>(
   './providers/*.ts',
@@ -14,21 +16,21 @@ const modelModules = import.meta.glob<{ imageModel: ImageModelDefinition }>(
   { eager: true }
 );
 
-const providers: ModelProviderDefinition[] = Object.values(providerModules)
+const hardcodedProviders: ModelProviderDefinition[] = Object.values(providerModules)
   .map((module) => module.provider)
   .filter((provider): provider is ModelProviderDefinition => Boolean(provider))
   .sort((a, b) => a.id.localeCompare(b.id));
 
-const imageModels: ImageModelDefinition[] = Object.values(modelModules)
+const hardcodedImageModels: ImageModelDefinition[] = Object.values(modelModules)
   .map((module) => module.imageModel)
   .filter((model): model is ImageModelDefinition => Boolean(model))
   .sort((a, b) => a.id.localeCompare(b.id));
 
-const providerMap = new Map<string, ModelProviderDefinition>(
-  providers.map((provider) => [provider.id, provider])
+const hardcodedProviderMap = new Map<string, ModelProviderDefinition>(
+  hardcodedProviders.map((provider) => [provider.id, provider])
 );
-const imageModelMap = new Map<string, ImageModelDefinition>(
-  imageModels.map((model) => [model.id, model])
+const hardcodedImageModelMap = new Map<string, ImageModelDefinition>(
+  hardcodedImageModels.map((model) => [model.id, model])
 );
 
 export const DEFAULT_IMAGE_MODEL_ID = 'kie/nano-banana-2';
@@ -38,17 +40,37 @@ const imageModelAliasMap = new Map<string, string>([
   ['gemini-3.1-flash-edit', 'ppio/gemini-3.1-flash'],
 ]);
 
+function getStore() {
+  return useServerModelStore.getState();
+}
+
 export function listImageModels(): ImageModelDefinition[] {
-  return imageModels;
+  const store = getStore();
+  if (!isDesktopPlatform() && store.loaded && store.models.length > 0) {
+    return store.models;
+  }
+  return hardcodedImageModels;
 }
 
 export function listModelProviders(): ModelProviderDefinition[] {
-  return providers;
+  const store = getStore();
+  if (!isDesktopPlatform() && store.loaded && store.providers.length > 0) {
+    return store.providers;
+  }
+  return hardcodedProviders;
 }
 
 export function getImageModel(modelId: string): ImageModelDefinition {
   const resolvedModelId = imageModelAliasMap.get(modelId) ?? modelId;
-  return imageModelMap.get(resolvedModelId) ?? imageModelMap.get(DEFAULT_IMAGE_MODEL_ID)!;
+  const store = getStore();
+
+  if (!isDesktopPlatform() && store.loaded && store.models.length > 0) {
+    const found = store.models.find((m) => m.id === resolvedModelId);
+    if (found) return found;
+    return store.models[0];
+  }
+
+  return hardcodedImageModelMap.get(resolvedModelId) ?? hardcodedImageModelMap.get(DEFAULT_IMAGE_MODEL_ID)!;
 }
 
 export function resolveImageModelResolutions(
@@ -65,7 +87,6 @@ export function resolveImageModelResolution(
   context: ImageModelRuntimeContext = {}
 ): ResolutionOption {
   const resolutionOptions = resolveImageModelResolutions(model, context);
-
   return (
     (requestedResolution
       ? resolutionOptions.find((item) => item.value === requestedResolution)
@@ -77,8 +98,13 @@ export function resolveImageModelResolution(
 }
 
 export function getModelProvider(providerId: string): ModelProviderDefinition {
+  const store = getStore();
+  if (!isDesktopPlatform() && store.loaded) {
+    const found = store.providers.find((p) => p.id === providerId);
+    if (found) return found;
+  }
   return (
-    providerMap.get(providerId) ?? {
+    hardcodedProviderMap.get(providerId) ?? {
       id: 'unknown',
       name: 'Unknown Provider',
       label: 'Unknown',

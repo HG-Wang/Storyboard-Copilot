@@ -53,6 +53,8 @@ import {
   resolveImageModelResolution,
   resolveImageModelResolutions,
 } from '@/features/canvas/models';
+import { useServerModelStore } from '@/features/canvas/models/serverModelStore';
+import { isDesktopPlatform } from '@/lib/platform';
 import { GRSAI_NANO_BANANA_PRO_MODEL_ID } from '@/features/canvas/models/image/grsai/nanoBananaPro';
 import { FAL_NANO_BANANA_2_MODEL_ID } from '@/features/canvas/models/image/fal/nanoBanana2';
 import { KIE_NANO_BANANA_2_MODEL_ID } from '@/features/canvas/models/image/kie/nanoBanana2';
@@ -273,7 +275,8 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
     [incomingImageItems]
   );
 
-  const imageModels = useMemo(() => listImageModels(), []);
+  const serverModelsLoaded = useServerModelStore((s) => s.loaded);
+  const imageModels = useMemo(() => listImageModels(), [serverModelsLoaded]);
 
   const selectedModel = useMemo(() => {
     const modelId = data.model ?? DEFAULT_IMAGE_MODEL_ID;
@@ -465,7 +468,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
       return;
     }
 
-    if (!providerApiKey) {
+    if (isDesktopPlatform() && !providerApiKey) {
       const errorMessage = t('node.imageEdit.apiKeyRequired');
       setError(errorMessage);
       void showErrorDialog(errorMessage, t('common.error'));
