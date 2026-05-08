@@ -1,4 +1,21 @@
-import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
+import { isDesktopPlatform } from '@/lib/platform';
+
+let _convertFileSrc: ((path: string) => string) | null = null;
+
+async function getConvertFileSrc() {
+  if (_convertFileSrc) return _convertFileSrc;
+  const { convertFileSrc } = await import('@tauri-apps/api/core');
+  _convertFileSrc = convertFileSrc;
+  return _convertFileSrc;
+}
+
+function isDesktop() {
+  try {
+    return isDesktopPlatform();
+  } catch {
+    return false;
+  }
+}
 
 import {
   loadImage,
@@ -110,43 +127,37 @@ export function isLikelyLocalImagePath(imageUrl: string): boolean {
 export function resolveImageDisplayUrl(imageUrl: string): string {
   const lower = imageUrl.toLowerCase();
   if (lower.startsWith('file://')) {
-    if (!isTauri()) {
-      return imageUrl;
-    }
+    if (!isDesktop()) return imageUrl;
 
     try {
       const parsed = new URL(imageUrl);
       const decodedPathname = decodeURIComponent(parsed.pathname);
       const normalizedPath = decodedPathname.replace(/^\/([A-Za-z]:[\\/])/, '$1');
-      if (!normalizedPath) {
-        return imageUrl;
-      }
-      return convertFileSrc(normalizedPath);
+      if (!normalizedPath) return imageUrl;
+      const cfs = _convertFileSrc;
+      return cfs ? cfs(normalizedPath) : imageUrl;
     } catch {
       return imageUrl;
     }
   }
 
-  if (!isLikelyLocalImagePath(imageUrl)) {
-    return imageUrl;
-  }
+  if (!isLikelyLocalImagePath(imageUrl)) return imageUrl;
+  if (!isDesktop()) return imageUrl;
 
-  if (!isTauri()) {
-    return imageUrl;
-  }
-
-  return convertFileSrc(imageUrl);
+  const cfs = _convertFileSrc;
+  return cfs ? cfs(imageUrl) : imageUrl;
 }
 
+async function initConvertFileSrc() {
+  if (!_convertFileSrc && isDesktopPlatform()) {
+    await getConvertFileSrc();
+  }
+}
+initConvertFileSrc();
+
 export async function persistImageLocally(source: string): Promise<string> {
-  if (isLikelyLocalImagePath(source)) {
-    return source;
-  }
-
-  if (!isTauri()) {
-    return source;
-  }
-
+  if (isLikelyLocalImagePath(source)) return source;
+  if (!isDesktop()) return source;
   return await persistImageSource(source);
 }
 
@@ -177,7 +188,7 @@ export async function imageUrlToDataUrl(imageUrl: string): Promise<string> {
   }
 
   if (isLikelyLocalImagePath(imageUrl)) {
-    if (isTauri()) {
+    if (isDesktop()) {
       try {
         return await loadImage(imageUrl);
       } catch (error) {
@@ -265,7 +276,7 @@ export async function prepareNodeImageFromFile(
     return prepared;
   }
 
-  if (isTauri()) {
+  if (isDesktop()) {
     const safeMaxDimension = Math.max(64, Math.floor(maxPreviewDimension));
     const readStarted = performance.now();
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -366,7 +377,7 @@ export async function prepareNodeImage(
   }
 
   const started = performance.now();
-  if (isTauri()) {
+  if (isDesktop()) {
     const safeMaxDimension = Math.max(64, Math.floor(maxPreviewDimension));
     try {
       const tauriStarted = performance.now();

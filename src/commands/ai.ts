@@ -1,4 +1,7 @@
-import { invoke, isTauri } from '@tauri-apps/api/core';
+import { invoke } from './transport';
+import { isDesktopPlatform } from '@/lib/platform';
+
+const isTauri = () => isDesktopPlatform();
 
 export interface GenerateRequest {
   prompt: string;
@@ -115,9 +118,6 @@ export async function setApiKey(provider: string, apiKey: string): Promise<void>
     apiKeyMasked: apiKey ? `${apiKey.slice(0, 4)}***${apiKey.slice(-2)}` : '',
     tauri: isTauri(),
   });
-  if (!isTauri()) {
-    throw new Error('当前不是 Tauri 容器环境，请使用 `npm run tauri dev` 启动');
-  }
   return await invoke('set_api_key', { provider, apiKey });
 }
 
@@ -127,10 +127,6 @@ export async function generateImage(request: GenerateRequest): Promise<string> {
     ...sanitizeGenerateRequestForLog(request),
     tauri: isTauri(),
   });
-
-  if (!isTauri()) {
-    throw new Error('当前不是 Tauri 容器环境，请使用 `npm run tauri dev` 启动');
-  }
 
   try {
     const rawResult = await invoke<unknown>('generate_image', { request });
@@ -180,10 +176,6 @@ export async function submitGenerateImageJob(request: GenerateRequest): Promise<
     tauri: isTauri(),
   });
 
-  if (!isTauri()) {
-    throw new Error('当前不是 Tauri 容器环境，请使用 `npm run tauri dev` 启动');
-  }
-
   const jobId = await invoke<string>('submit_generate_image_job', { request });
   if (typeof jobId !== 'string' || !jobId.trim()) {
     throw new Error('submit_generate_image_job returned invalid job id');
@@ -192,10 +184,6 @@ export async function submitGenerateImageJob(request: GenerateRequest): Promise<
 }
 
 export async function getGenerateImageJob(jobId: string): Promise<GenerationJobStatus> {
-  if (!isTauri()) {
-    throw new Error('当前不是 Tauri 容器环境，请使用 `npm run tauri dev` 启动');
-  }
-
   const result = await invoke<GenerationJobStatus>('get_generate_image_job', { jobId });
   if (!result || typeof result !== 'object' || typeof result.status !== 'string') {
     throw new Error('get_generate_image_job returned invalid payload');

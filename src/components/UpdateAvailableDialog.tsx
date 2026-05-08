@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { openUrlSafe } from '@/lib/platform';
 import { UiButton, UiModal, UiSelect } from '@/components/ui';
 
 const QUARK_DOWNLOAD_URL = 'https://pan.quark.cn/s/5b6733a8fc8e';
@@ -35,11 +35,11 @@ export function UpdateAvailableDialog({
   );
 
   const handleOpenQuark = useCallback(() => {
-    void openUrl(QUARK_DOWNLOAD_URL);
+    openUrlSafe(QUARK_DOWNLOAD_URL);
   }, []);
 
   const handleOpenGithub = useCallback(() => {
-    void openUrl(GITHUB_RELEASES_URL);
+    openUrlSafe(GITHUB_RELEASES_URL);
   }, []);
 
   const handleApplyIgnore = useCallback(() => {

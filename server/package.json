@@ -1,0 +1,16 @@
+{
+  "name": "storyboard-copilot-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "better-sqlite3": "^11.6.0",
+    "sharp": "^0.33.5",
+    "uuid": "^10.0.0",
+    "cors": "^2.8.5"
+  }
+}

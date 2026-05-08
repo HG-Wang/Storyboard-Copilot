@@ -1,5 +1,4 @@
-import { getVersion } from '@tauri-apps/api/app';
-import { isTauri } from '@tauri-apps/api/core';
+import { getDesktopAppVersion, isDesktopPlatform } from '@/lib/platform';
 import { checkLatestReleaseTag } from '../../../commands/update';
 
 const GITHUB_LATEST_RELEASE_API = 'https://api.github.com/repos/henjicc/Storyboard-Copilot/releases/latest';
@@ -144,7 +143,7 @@ function compareVersions(left: string, right: string): number {
 
 export async function checkForUpdate(): Promise<UpdateCheckResult> {
   try {
-    const currentVersion = normalizeVersion(await getVersion());
+    const currentVersion = normalizeVersion(await getDesktopAppVersion());
     if (!currentVersion) {
       return { hasUpdate: false };
     }
@@ -154,7 +153,7 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
 
     let latestTag = '';
 
-    if (isTauri()) {
+    if (isDesktopPlatform()) {
       try {
         latestTag = normalizeVersion((await checkLatestReleaseTag()) ?? '');
       } catch {

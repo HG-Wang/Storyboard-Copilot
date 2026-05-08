@@ -1,8 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react';
 import { Copy, Crop, Download, FolderOpen, PenLine, RefreshCw, Scissors, Trash2, Unlink2 } from 'lucide-react';
-import { save } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
+import {
+  isDesktopPlatform,
+  saveDesktopFileDialog,
+} from '@/lib/platform';
 
 import {
   NODE_TOOL_TYPES,
@@ -266,18 +269,27 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   }, [canCopyGenerationError, generationErrorReport]);
 
   const handleDownloadSaveAs = useCallback(async () => {
-    if (!imageSource) {
-      return;
-    }
+    if (!imageSource) return;
 
     try {
-      const selectedPath = await save({
-        defaultPath: `node-${node.id}.png`,
-      });
-      if (!selectedPath || Array.isArray(selectedPath)) {
-        return;
+      if (isDesktopPlatform()) {
+        const selectedPath = await saveDesktopFileDialog({
+          defaultPath: `node-${node.id}.png`,
+        });
+        if (!selectedPath) return;
+        await saveImageSourceToPath(imageSource, selectedPath);
+      } else {
+        const response = await fetch(imageSource);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `node-${node.id}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
       }
-      await saveImageSourceToPath(imageSource, selectedPath);
       closeDownloadMenu();
     } catch (error) {
       console.error('Failed to save image with save-as', error);

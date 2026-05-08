@@ -1,16 +1,18 @@
-import { useCallback } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Minus, X, Maximize2, Settings, ArrowLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Moon, Sun, Languages } from 'lucide-react';
 import { useThemeStore } from '@/stores/themeStore';
 import { useProjectStore } from '@/stores/projectStore';
+import { isDesktopPlatform, getDesktopWindow } from '@/lib/platform';
 import closeNormalIcon from '@/assets/macos-traffic-lights/1-close-1-normal.svg';
 import closeHoverIcon from '@/assets/macos-traffic-lights/2-close-2-hover.svg';
 import minimizeNormalIcon from '@/assets/macos-traffic-lights/2-minimize-1-normal.svg';
 import minimizeHoverIcon from '@/assets/macos-traffic-lights/2-minimize-2-hover.svg';
 import maximizeNormalIcon from '@/assets/macos-traffic-lights/3-maximize-1-normal.svg';
 import maximizeHoverIcon from '@/assets/macos-traffic-lights/3-maximize-2-hover.svg';
+
+type AppWindowRef = Awaited<ReturnType<typeof getDesktopWindow>> | null;
 
 interface TitleBarProps {
   onSettingsClick: () => void;
@@ -23,7 +25,18 @@ export function TitleBar({ onSettingsClick, showBackButton, onBackClick }: Title
   const { theme, toggleTheme } = useThemeStore();
   const currentProjectName = useProjectStore((state) => state.currentProject?.name);
 
-  const appWindow = getCurrentWindow();
+  const appWindowRef = useRef<AppWindowRef>(null);
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  useEffect(() => {
+    setIsDesktop(isDesktopPlatform());
+    if (isDesktopPlatform()) {
+      getDesktopWindow().then((win) => {
+        appWindowRef.current = win;
+      });
+    }
+  }, []);
+
   const isZh = i18n.language.startsWith('zh');
   const isMac =
     typeof navigator !== 'undefined'
@@ -32,30 +45,32 @@ export function TitleBar({ onSettingsClick, showBackButton, onBackClick }: Title
   const titleText = currentProjectName ? `${currentProjectName} - ${appTitle}` : appTitle;
 
   const handleMinimize = useCallback(async () => {
-    await appWindow.minimize();
-  }, [appWindow]);
+    await appWindowRef.current?.minimize();
+  }, []);
 
   const handleMaximize = useCallback(async () => {
-    const isMaximized = await appWindow.isMaximized();
+    if (!appWindowRef.current) return;
+    const isMaximized = await appWindowRef.current.isMaximized();
     if (isMaximized) {
-      await appWindow.unmaximize();
+      await appWindowRef.current.unmaximize();
     } else {
-      await appWindow.maximize();
+      await appWindowRef.current.maximize();
     }
-  }, [appWindow]);
+  }, []);
 
   const handleClose = useCallback(async () => {
-    await appWindow.close();
-  }, [appWindow]);
+    await appWindowRef.current?.close();
+  }, []);
 
   const handleDragStart = useCallback(async (e: React.MouseEvent) => {
+    if (!appWindowRef.current) return;
     if (e.button !== 0) return;
     const target = e.target as HTMLElement | null;
     if (target?.closest('button') || target?.closest('[data-no-drag="true"]')) {
       return;
     }
-    await appWindow.startDragging();
-  }, [appWindow]);
+    await appWindowRef.current.startDragging();
+  }, []);
 
   const handleLanguageClick = useCallback(() => {
     const newLang = i18n.language.startsWith('zh') ? 'en' : 'zh';
@@ -68,7 +83,7 @@ export function TitleBar({ onSettingsClick, showBackButton, onBackClick }: Title
 
   return (
     <div className="h-10 flex items-center justify-between bg-surface-dark border-b border-border-dark select-none z-50 relative">
-      {isMac ? (
+      {isDesktop && isMac ? (
         <div className="group flex items-center h-full pl-3 pr-2 gap-2" data-no-drag="true">
           <button
             type="button"
@@ -107,7 +122,7 @@ export function TitleBar({ onSettingsClick, showBackButton, onBackClick }: Title
       ) : null}
 
       <div
-        className="flex-1 h-full flex items-center px-4 cursor-move"
+        className={`flex-1 h-full flex items-center px-4 ${isDesktop ? 'cursor-move' : ''}`}
         onMouseDown={handleDragStart}
       >
         {showBackButton && onBackClick && (
@@ -166,7 +181,7 @@ export function TitleBar({ onSettingsClick, showBackButton, onBackClick }: Title
           <Settings className="w-4 h-4 text-text-muted" />
         </button>
 
-        {!isMac ? (
+        {isDesktop && !isMac ? (
           <>
             <div className="w-px h-4 bg-border-dark mx-1" />
 

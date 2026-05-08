@@ -1,4 +1,7 @@
-import { invoke, isTauri } from '@tauri-apps/api/core';
+import { invoke } from './transport';
+import { isDesktopPlatform } from '@/lib/platform';
+
+const isTauri = () => isDesktopPlatform();
 
 export async function checkLatestReleaseTag(): Promise<string | null> {
   if (!isTauri()) {

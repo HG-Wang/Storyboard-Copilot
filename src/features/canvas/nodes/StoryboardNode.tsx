@@ -15,9 +15,13 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import { Download, FolderOpen, ImagePlus, SlidersHorizontal, SquareArrowOutUpRight } from 'lucide-react';
-import { open } from '@tauri-apps/plugin-dialog';
-import { openPath, revealItemInDir } from '@tauri-apps/plugin-opener';
-import { join } from '@tauri-apps/api/path';
+import {
+  isDesktopPlatform,
+  openDesktopFileDialog,
+  joinDesktopPath,
+  openDesktopPath,
+  revealItemInDesktopDir,
+} from '@/lib/platform';
 
 import {
   embedStoryboardImageMetadata,
@@ -891,20 +895,18 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
 
   const resolvePackRootDir = useCallback(async (): Promise<string | null> => {
     const presetPath = downloadPresetPaths.find((path) => path.trim().length > 0)?.trim() ?? '';
-    if (presetPath) {
-      return presetPath;
+    if (presetPath) return presetPath;
+
+    if (isDesktopPlatform()) {
+      const selected = await openDesktopFileDialog({
+        directory: true,
+        title: '选择分镜导出文件夹',
+      });
+      if (!selected) return null;
+      return selected;
     }
 
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: '选择分镜导出文件夹',
-    });
-    if (!selected || Array.isArray(selected)) {
-      return null;
-    }
-
-    return selected;
+    return null;
   }, [downloadPresetPaths]);
 
   const handlePackSingleImages = useCallback(async () => {
@@ -934,7 +936,9 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
       }
 
       const normalizedProjectName = sanitizePathSegment(currentProjectName ?? '', '未命名项目');
-      const outputDir = await join(rootDir, normalizedProjectName);
+      const outputDir = isDesktopPlatform()
+        ? await joinDesktopPath(rootDir, normalizedProjectName)
+        : `${rootDir}/${normalizedProjectName}`;
       const fileProjectName = sanitizeExportLabel(normalizedProjectName, 40) || '项目';
       let firstSavedFilePath = '';
 
@@ -967,21 +971,25 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   ]);
 
   const handleOpenPackFolder = useCallback(async () => {
-    if (!packRevealFilePath && !packOutputDir) {
+    if (!packRevealFilePath && !packOutputDir) return;
+
+    if (!isDesktopPlatform()) {
+      setIsPackDoneDialogOpen(false);
       return;
     }
+
     try {
       if (packRevealFilePath) {
-        await revealItemInDir(packRevealFilePath);
+        await revealItemInDesktopDir(packRevealFilePath);
         return;
       }
       if (packOutputDir) {
-        await openPath(packOutputDir);
+        await openDesktopPath(packOutputDir);
       }
     } catch {
       try {
         if (packOutputDir) {
-          await openPath(packOutputDir);
+          await openDesktopPath(packOutputDir);
           return;
         }
       } catch (error) {

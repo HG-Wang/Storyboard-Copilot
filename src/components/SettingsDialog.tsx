@@ -4,9 +4,11 @@ import { Trans, useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
-import { getVersion } from '@tauri-apps/api/app';
-import { open } from '@tauri-apps/plugin-dialog';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import {
+  getDesktopAppVersion,
+  openDesktopFileDialog,
+  openUrlSafe,
+} from '@/lib/platform';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { UiCheckbox, UiSelect } from '@/components/ui';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion';
@@ -191,20 +193,14 @@ export function SettingsDialog({
     let mounted = true;
     const loadAppVersion = async () => {
       try {
-        const version = await getVersion();
-        if (mounted) {
-          setAppVersion(version);
-        }
+        const version = await getDesktopAppVersion();
+        if (mounted) setAppVersion(version || '');
       } catch {
-        if (mounted) {
-          setAppVersion('');
-        }
+        if (mounted) setAppVersion('');
       }
     };
     void loadAppVersion();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -331,17 +327,13 @@ export function SettingsDialog({
 
   const handlePickDownloadPath = useCallback(async () => {
     try {
-      const selected = await open({
+      const selected = await openDesktopFileDialog({
         directory: true,
-        multiple: false,
+        title: '选择下载路径',
       });
-      if (!selected || Array.isArray(selected)) {
-        return;
-      }
+      if (!selected) return;
       setLocalDownloadPresetPaths((previous) => {
-        if (previous.includes(selected)) {
-          return previous;
-        }
+        if (previous.includes(selected)) return previous;
         return [...previous, selected].slice(0, 8);
       });
     } catch (error) {
@@ -368,10 +360,8 @@ export function SettingsDialog({
   }, []);
 
   const handleMarkdownLinkClick = useCallback((href?: string) => {
-    if (!href) {
-      return;
-    }
-    void openUrl(href);
+    if (!href) return;
+    openUrlSafe(href);
   }, []);
 
   if (!shouldRender) return null;

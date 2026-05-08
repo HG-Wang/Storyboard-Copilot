@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
-import { invoke } from '@tauri-apps/api/core';
 import { Canvas } from './features/canvas/Canvas';
 import { TitleBar } from './components/TitleBar';
 import { SettingsDialog } from './components/SettingsDialog';
@@ -10,6 +9,7 @@ import { ProjectManager } from './features/project/ProjectManager';
 import { useThemeStore } from './stores/themeStore';
 import { useProjectStore } from './stores/projectStore';
 import { useSettingsStore } from './stores/settingsStore';
+import { isDesktopPlatform } from '@/lib/platform';
 import {
   checkForUpdate,
   isUpdateVersionSuppressed,
@@ -104,20 +104,19 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!isDesktopPlatform()) return;
+
     let cancelled = false;
     let retryTimer: ReturnType<typeof window.setTimeout> | null = null;
 
     const notifyFrontendReady = async (attempt = 1) => {
-      if (cancelled) {
-        return;
-      }
+      if (cancelled) return;
 
       try {
+        const { invoke } = await import('@tauri-apps/api/core');
         await invoke('frontend_ready');
       } catch (error) {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         if (attempt === 1 || attempt % 10 === 0) {
           console.warn('failed to notify frontend readiness', error);
