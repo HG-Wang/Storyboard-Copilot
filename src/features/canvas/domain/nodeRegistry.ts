@@ -15,7 +15,7 @@ import {
   type UploadImageNodeData,
 } from './canvasNodes';
 import { DEFAULT_NODE_DISPLAY_NAME } from './nodeDisplay';
-import { DEFAULT_IMAGE_MODEL_ID } from '../models';
+import { DEFAULT_IMAGE_MODEL_ID, DEFAULT_TEXT_MODEL_ID } from '../models';
 
 export type MenuIconKey = 'upload' | 'sparkles' | 'layout' | 'text';
 
@@ -176,8 +176,6 @@ const textAnnotationNodeDefinition: CanvasNodeDefinition<TextAnnotationNodeData>
     content: '',
   }),
 };
-
-const DEFAULT_TEXT_MODEL_ID = 'openai/gpt-4o-mini';
 
 const textGenNodeDefinition: CanvasNodeDefinition<TextGenNodeData> = {
   type: CANVAS_NODE_TYPES.textGen,

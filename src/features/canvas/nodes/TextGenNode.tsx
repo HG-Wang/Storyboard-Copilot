@@ -1,4 +1,4 @@
-import { memo, useCallback, useState, useEffect } from 'react';
+import { memo, useCallback, useMemo, useState, useEffect } from 'react';
 import { type NodeProps } from '@xyflow/react';
 import { Sparkles, Loader2, RotateCcw, ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -11,6 +11,7 @@ import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { DEFAULT_TEXT_MODEL_ID, getTextModel, listTextModels } from '@/features/canvas/models';
 import { useServerModelStore } from '@/features/canvas/models/serverModelStore';
 import { canvasAiGateway } from '@/features/canvas/application/canvasServices';
 
@@ -33,13 +34,14 @@ export const TextGenNode = memo(({
   const { t } = useTranslation();
   const setSelectedNode = useCanvasStore((s) => s.setSelectedNode);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
-  const textModels = useServerModelStore((s) => s.textModels);
+  const serverModelsLoaded = useServerModelStore((s) => s.loaded);
+  const textModels = useMemo(() => listTextModels(), [serverModelsLoaded]);
 
   const [showConfig, setShowConfig] = useState(false);
 
   const prompt = typeof data.prompt === 'string' ? data.prompt : '';
   const systemPrompt = typeof data.systemPrompt === 'string' ? data.systemPrompt : '';
-  const model = typeof data.model === 'string' ? data.model : 'openai/gpt-4o-mini';
+  const model = typeof data.model === 'string' ? data.model : DEFAULT_TEXT_MODEL_ID;
   const generatedContent = typeof data.generatedContent === 'string' ? data.generatedContent : '';
   const isGenerating = Boolean(data.isGenerating);
 
@@ -47,7 +49,7 @@ export const TextGenNode = memo(({
   const resolvedWidth = Math.max(MIN_WIDTH, Math.round(width ?? DEFAULT_WIDTH));
   const resolvedHeight = Math.max(MIN_HEIGHT, Math.round(height ?? DEFAULT_HEIGHT));
 
-  const currentModel = textModels.find((m) => m.id === model);
+  const currentModel = getTextModel(model);
 
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim() || isGenerating) return;

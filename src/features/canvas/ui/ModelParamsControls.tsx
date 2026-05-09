@@ -196,16 +196,10 @@ export const ModelParamsControls = memo(({
   );
   const selectedProviderName = selectedProvider.label || selectedProvider.name;
   const providerOptions = useMemo(() => {
-    const providerOrder = ['kie', 'ppio', 'fal', 'grsai'];
-    const providerIndex = new Map(providerOrder.map((id, index) => [id, index]));
     const uniqueProviderIds = Array.from(new Set(imageModels.map((model) => model.providerId)));
     return uniqueProviderIds
       .map((providerId) => getModelProvider(providerId))
-      .sort((left, right) => {
-        const leftIndex = providerIndex.get(left.id) ?? Number.MAX_SAFE_INTEGER;
-        const rightIndex = providerIndex.get(right.id) ?? Number.MAX_SAFE_INTEGER;
-        return leftIndex - rightIndex;
-      });
+      .sort((left, right) => (left.sortOrder ?? 999) - (right.sortOrder ?? 999));
   }, [imageModels]);
   const providerModels = useMemo(
     () => imageModels.filter((model) => model.providerId === panelProviderId),

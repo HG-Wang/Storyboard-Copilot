@@ -137,15 +137,7 @@ export function SettingsDialog({
     setAutoCheckAppUpdateOnLaunch,
     setEnableUpdateDialog,
   } = useSettingsStore();
-  const providers = useMemo(() => {
-    const providerOrder = ['kie', 'ppio', 'fal', 'grsai'];
-    const providerIndex = new Map(providerOrder.map((id, index) => [id, index]));
-    return listModelProviders().slice().sort((left, right) => {
-      const leftIndex = providerIndex.get(left.id) ?? Number.MAX_SAFE_INTEGER;
-      const rightIndex = providerIndex.get(right.id) ?? Number.MAX_SAFE_INTEGER;
-      return leftIndex - rightIndex;
-    });
-  }, []);
+  const providers = useMemo(() => listModelProviders(), []);
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>(initialCategory);
   const [appVersion, setAppVersion] = useState<string>('');
   const [localApiKeys, setLocalApiKeys] = useState<Record<string, string>>(apiKeys);

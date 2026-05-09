@@ -4,5 +4,6 @@ export const provider: ModelProviderDefinition = {
   id: 'kie',
   name: 'KIE',
   label: 'KIE',
+  mediaTypes: ['image'],
+  sortOrder: 0,
 };
-

@@ -77,15 +77,16 @@ export const useServerModelStore = create<ServerModelState>((set, get) => ({
         invoke<ServerTextModel[]>('list_text_models').catch(() => []),
       ]);
 
-      const providerMap = new Map<string, ModelProviderDefinition>();
+      const providerMediaTypeMap = new Map<string, Set<'image' | 'text'>>();
 
       let models: ImageModelDefinition[] = [];
       if (Array.isArray(serverModels) && serverModels.length > 0) {
         models = serverModels.map(buildModelDef);
         for (const m of serverModels) {
-          if (!providerMap.has(m.provider_id)) {
-            providerMap.set(m.provider_id, { id: m.provider_id, name: m.provider_id, label: m.provider_id });
+          if (!providerMediaTypeMap.has(m.provider_id)) {
+            providerMediaTypeMap.set(m.provider_id, new Set());
           }
+          providerMediaTypeMap.get(m.provider_id)!.add('image');
         }
       }
 
@@ -93,13 +94,23 @@ export const useServerModelStore = create<ServerModelState>((set, get) => ({
       if (Array.isArray(serverTextModels) && serverTextModels.length > 0) {
         textModels = serverTextModels.map(buildTextModelDef);
         for (const m of serverTextModels) {
-          if (!providerMap.has(m.provider_id)) {
-            providerMap.set(m.provider_id, { id: m.provider_id, name: m.provider_id, label: m.provider_id });
+          if (!providerMediaTypeMap.has(m.provider_id)) {
+            providerMediaTypeMap.set(m.provider_id, new Set());
           }
+          providerMediaTypeMap.get(m.provider_id)!.add('text');
         }
       }
 
-      set({ models, textModels, providers: Array.from(providerMap.values()), loaded: true });
+      const providers: ModelProviderDefinition[] = Array.from(providerMediaTypeMap.entries()).map(
+        ([providerId, mediaTypes]) => ({
+          id: providerId,
+          name: providerId,
+          label: providerId,
+          mediaTypes: Array.from(mediaTypes),
+        })
+      );
+
+      set({ models, textModels, providers, loaded: true });
     } catch (e) {
       console.warn('[serverModels] load failed:', e);
       set({ loaded: true });

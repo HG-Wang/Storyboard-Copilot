@@ -12,5 +12,6 @@ export const provider: ModelProviderDefinition = {
   id: 'grsai',
   name: 'GRSAI',
   label: 'GRSAI',
+  mediaTypes: ['image'],
+  sortOrder: 3,
 };
-

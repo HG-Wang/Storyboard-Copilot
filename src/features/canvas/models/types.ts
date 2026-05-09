@@ -1,11 +1,13 @@
 import type { ModelPricingDefinition } from '@/features/canvas/pricing/types';
 
-export type MediaModelType = 'image' | 'video' | 'audio';
+export type MediaModelType = 'image' | 'text' | 'video' | 'audio';
 
 export interface ModelProviderDefinition {
   id: string;
   name: string;
   label: string;
+  mediaTypes: MediaModelType[];
+  sortOrder?: number;
 }
 
 export interface AspectRatioOption {
