@@ -65,11 +65,13 @@ function App() {
 
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const loadFromStorage = useAuthStore((state) => state.loadFromStorage);
+  const loadSettings = useSettingsStore((state) => state.loadSettings);
   const isWeb = !isDesktopPlatform();
 
   useEffect(() => {
     loadFromStorage();
-  }, [loadFromStorage]);
+    void loadSettings();
+  }, [loadFromStorage, loadSettings]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');

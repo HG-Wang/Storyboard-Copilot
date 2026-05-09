@@ -187,6 +187,9 @@ pub fn run() {
             project_state::update_project_viewport_record,
             project_state::rename_project_record,
             project_state::delete_project_record,
+            project_state::get_user_settings,
+            project_state::set_user_settings,
+            project_state::delete_user_settings,
             system::get_runtime_system_info,
             update::check_latest_release_tag,
         ])

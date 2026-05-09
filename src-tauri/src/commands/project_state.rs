@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use rusqlite::{params, Connection};
@@ -63,6 +63,10 @@ fn ensure_projects_table(conn: &Connection) -> Result<(), String> {
           PRIMARY KEY(project_id, path)
         );
         CREATE INDEX IF NOT EXISTS idx_project_image_refs_path ON project_image_refs(path);
+        CREATE TABLE IF NOT EXISTS user_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
         "#,
     )
     .map_err(|e| format!("Failed to initialize projects table: {}", e))?;
@@ -460,5 +464,54 @@ pub fn delete_project_record(app: AppHandle, project_id: String) -> Result<(), S
         .map_err(|e| format!("Failed to commit delete transaction: {}", e))?;
 
     prune_unreferenced_images(&app)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_user_settings(app: AppHandle) -> Result<HashMap<String, String>, String> {
+    let conn = open_db(&app)?;
+    let mut stmt = conn
+        .prepare("SELECT key, value FROM user_settings")
+        .map_err(|e| format!("Failed to prepare get_user_settings query: {}", e))?;
+
+    let rows = stmt
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+        .map_err(|e| format!("Failed to query user_settings: {}", e))?;
+
+    let mut settings = HashMap::new();
+    for row in rows {
+        let (key, value) = row.map_err(|e| format!("Failed to decode user_settings row: {}", e))?;
+        settings.insert(key, value);
+    }
+    Ok(settings)
+}
+
+#[tauri::command]
+pub fn set_user_settings(app: AppHandle, settings: HashMap<String, String>) -> Result<(), String> {
+    let mut conn = open_db(&app)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("Failed to begin set_user_settings transaction: {}", e))?;
+
+    for (key, value) in &settings {
+        tx.execute(
+            "INSERT INTO user_settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![key, value],
+        )
+        .map_err(|e| format!("Failed to upsert user_setting '{}': {}", key, e))?;
+    }
+
+    tx.commit()
+        .map_err(|e| format!("Failed to commit set_user_settings transaction: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_user_settings(app: AppHandle, keys: Vec<String>) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    for key in &keys {
+        conn.execute("DELETE FROM user_settings WHERE key = ?1", params![key])
+            .map_err(|e| format!("Failed to delete user_setting '{}': {}", key, e))?;
+    }
     Ok(())
 }

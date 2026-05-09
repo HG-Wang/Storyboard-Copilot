@@ -1,17 +1,70 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { getUserSettings, setUserSettings } from '@/commands/userSettings';
 import {
   DEFAULT_GRSAI_CREDIT_TIER_ID,
   PRICE_DISPLAY_CURRENCY_MODES,
   type GrsaiCreditTierId,
   type PriceDisplayCurrencyMode,
 } from '@/features/canvas/pricing/types';
+import { isDesktopPlatform } from '@/lib/platform';
 
 export type UiRadiusPreset = 'compact' | 'default' | 'large';
 export type ThemeTonePreset = 'neutral' | 'warm' | 'cool';
 export type CanvasEdgeRoutingMode = 'spline' | 'orthogonal' | 'smartOrthogonal';
 export type ProviderApiKeys = Record<string, string>;
 export const DEFAULT_GRSAI_NANO_BANANA_PRO_MODEL = 'nano-banana-pro';
+
+const SETTINGS_STORAGE_KEY = 'settings-v10';
+
+interface PersistedSettings {
+  apiKeys?: ProviderApiKeys;
+  grsaiNanoBananaProModel?: string;
+  hideProviderGuidePopover?: boolean;
+  downloadPresetPaths?: string[];
+  useUploadFilenameAsNodeTitle?: boolean;
+  storyboardGenKeepStyleConsistent?: boolean;
+  storyboardGenDisableTextInImage?: boolean;
+  storyboardGenAutoInferEmptyFrame?: boolean;
+  ignoreAtTagWhenCopyingAndGenerating?: boolean;
+  enableStoryboardGenGridPreviewShortcut?: boolean;
+  showStoryboardGenAdvancedRatioControls?: boolean;
+  showNodePrice?: boolean;
+  priceDisplayCurrencyMode?: PriceDisplayCurrencyMode | string;
+  usdToCnyRate?: number | string;
+  preferDiscountedPrice?: boolean;
+  grsaiCreditTierId?: GrsaiCreditTierId | string;
+  uiRadiusPreset?: UiRadiusPreset;
+  themeTonePreset?: ThemeTonePreset;
+  accentColor?: string;
+  canvasEdgeRoutingMode?: CanvasEdgeRoutingMode | string;
+  autoCheckAppUpdateOnLaunch?: boolean;
+  enableUpdateDialog?: boolean;
+}
+
+interface MigratedSettings {
+  apiKeys: ProviderApiKeys;
+  grsaiNanoBananaProModel: string;
+  hideProviderGuidePopover: boolean;
+  downloadPresetPaths: string[];
+  useUploadFilenameAsNodeTitle: boolean;
+  storyboardGenKeepStyleConsistent: boolean;
+  storyboardGenDisableTextInImage: boolean;
+  storyboardGenAutoInferEmptyFrame: boolean;
+  ignoreAtTagWhenCopyingAndGenerating: boolean;
+  enableStoryboardGenGridPreviewShortcut: boolean;
+  showStoryboardGenAdvancedRatioControls: boolean;
+  showNodePrice: boolean;
+  priceDisplayCurrencyMode: PriceDisplayCurrencyMode;
+  usdToCnyRate: number;
+  preferDiscountedPrice: boolean;
+  grsaiCreditTierId: GrsaiCreditTierId;
+  uiRadiusPreset: UiRadiusPreset;
+  themeTonePreset: ThemeTonePreset;
+  accentColor: string;
+  canvasEdgeRoutingMode: CanvasEdgeRoutingMode;
+  autoCheckAppUpdateOnLaunch: boolean;
+  enableUpdateDialog: boolean;
+}
 
 interface SettingsState {
   isHydrated: boolean;
@@ -37,6 +90,7 @@ interface SettingsState {
   canvasEdgeRoutingMode: CanvasEdgeRoutingMode;
   autoCheckAppUpdateOnLaunch: boolean;
   enableUpdateDialog: boolean;
+  loadSettings: () => Promise<void>;
   setProviderApiKey: (providerId: string, key: string) => void;
   setGrsaiNanoBananaProModel: (model: string) => void;
   setHideProviderGuidePopover: (hide: boolean) => void;
@@ -158,170 +212,239 @@ export function getConfiguredApiKeyCount(
   }, 0);
 }
 
-export const useSettingsStore = create<SettingsState>()(
-  persist(
-    (set) => ({
-      isHydrated: false,
-      apiKeys: {},
-      grsaiNanoBananaProModel: DEFAULT_GRSAI_NANO_BANANA_PRO_MODEL,
-      hideProviderGuidePopover: false,
-      downloadPresetPaths: [],
-      useUploadFilenameAsNodeTitle: true,
-      storyboardGenKeepStyleConsistent: true,
-      storyboardGenDisableTextInImage: true,
-      storyboardGenAutoInferEmptyFrame: true,
-      ignoreAtTagWhenCopyingAndGenerating: true,
-      enableStoryboardGenGridPreviewShortcut: false,
-      showStoryboardGenAdvancedRatioControls: false,
-      showNodePrice: true,
-      priceDisplayCurrencyMode: 'auto',
-      usdToCnyRate: 7.2,
-      preferDiscountedPrice: false,
-      grsaiCreditTierId: DEFAULT_GRSAI_CREDIT_TIER_ID,
-      uiRadiusPreset: 'default',
-      themeTonePreset: 'neutral',
-      accentColor: '#3B82F6',
-      canvasEdgeRoutingMode: 'spline',
-      autoCheckAppUpdateOnLaunch: true,
-      enableUpdateDialog: true,
-      setProviderApiKey: (providerId, key) =>
-        set((state) => ({
-          apiKeys: {
-            ...state.apiKeys,
-            [providerId]: normalizeApiKey(key),
-          },
-        })),
-      setGrsaiNanoBananaProModel: (model) =>
-        set({
-          grsaiNanoBananaProModel: normalizeGrsaiNanoBananaProModel(model),
-        }),
-      setHideProviderGuidePopover: (hide) => set({ hideProviderGuidePopover: hide }),
-      setDownloadPresetPaths: (paths) => {
-        const uniquePaths = Array.from(
-          new Set(paths.map((path) => path.trim()).filter((path) => path.length > 0))
-        ).slice(0, 8);
-        set({ downloadPresetPaths: uniquePaths });
-      },
-      setUseUploadFilenameAsNodeTitle: (enabled) => set({ useUploadFilenameAsNodeTitle: enabled }),
-      setStoryboardGenKeepStyleConsistent: (enabled) =>
-        set({ storyboardGenKeepStyleConsistent: enabled }),
-      setStoryboardGenDisableTextInImage: (enabled) =>
-        set({ storyboardGenDisableTextInImage: enabled }),
-      setStoryboardGenAutoInferEmptyFrame: (enabled) =>
-        set({ storyboardGenAutoInferEmptyFrame: enabled }),
-      setIgnoreAtTagWhenCopyingAndGenerating: (enabled) =>
-        set({ ignoreAtTagWhenCopyingAndGenerating: enabled }),
-      setEnableStoryboardGenGridPreviewShortcut: (enabled) =>
-        set({ enableStoryboardGenGridPreviewShortcut: enabled }),
-      setShowStoryboardGenAdvancedRatioControls: (enabled) =>
-        set({ showStoryboardGenAdvancedRatioControls: enabled }),
-      setShowNodePrice: (enabled) => set({ showNodePrice: enabled }),
-      setPriceDisplayCurrencyMode: (priceDisplayCurrencyMode) =>
-        set({
-          priceDisplayCurrencyMode:
-            normalizePriceDisplayCurrencyMode(priceDisplayCurrencyMode),
-        }),
-      setUsdToCnyRate: (usdToCnyRate) =>
-        set({ usdToCnyRate: normalizeUsdToCnyRate(usdToCnyRate) }),
-      setPreferDiscountedPrice: (enabled) => set({ preferDiscountedPrice: enabled }),
-      setGrsaiCreditTierId: (grsaiCreditTierId) =>
-        set({ grsaiCreditTierId: normalizeGrsaiCreditTierId(grsaiCreditTierId) }),
-      setUiRadiusPreset: (uiRadiusPreset) => set({ uiRadiusPreset }),
-      setThemeTonePreset: (themeTonePreset) => set({ themeTonePreset }),
-      setAccentColor: (color) => set({ accentColor: normalizeHexColor(color) }),
-      setCanvasEdgeRoutingMode: (canvasEdgeRoutingMode) =>
-        set({ canvasEdgeRoutingMode: normalizeCanvasEdgeRoutingMode(canvasEdgeRoutingMode) }),
-      setAutoCheckAppUpdateOnLaunch: (enabled) => set({ autoCheckAppUpdateOnLaunch: enabled }),
-      setEnableUpdateDialog: (enabled) => set({ enableUpdateDialog: enabled }),
-    }),
-    {
-      name: 'settings-storage',
-      version: 10,
-      onRehydrateStorage: () => {
-        return (_state, error) => {
-          if (error) {
-            console.error('failed to hydrate settings storage', error);
-          }
-          useSettingsStore.setState({ isHydrated: true });
-        };
-      },
-      migrate: (persistedState: unknown) => {
-        const state = (persistedState ?? {}) as {
-          apiKey?: string;
-          apiKeys?: ProviderApiKeys;
-          ignoreAtTagWhenCopyingAndGenerating?: boolean;
-          grsaiNanoBananaProModel?: string;
-          hideProviderGuidePopover?: boolean;
-          canvasEdgeRoutingMode?: CanvasEdgeRoutingMode | string;
-          autoCheckAppUpdateOnLaunch?: boolean;
-          enableUpdateDialog?: boolean;
-          enableStoryboardGenGridPreviewShortcut?: boolean;
-          showStoryboardGenAdvancedRatioControls?: boolean;
-          storyboardGenAutoInferEmptyFrame?: boolean;
-          showNodePrice?: boolean;
-          priceDisplayCurrencyMode?: PriceDisplayCurrencyMode | string;
-          usdToCnyRate?: number | string;
-          preferDiscountedPrice?: boolean;
-          grsaiCreditTierId?: GrsaiCreditTierId | string;
-        };
+let _persistTimer: ReturnType<typeof setTimeout> | null = null;
 
-        const migratedApiKeys = normalizeApiKeys(state.apiKeys);
-        const ignoreAtTagWhenCopyingAndGenerating =
-          state.ignoreAtTagWhenCopyingAndGenerating ?? true;
-        if (Object.keys(migratedApiKeys).length > 0) {
-          return {
-            ...(persistedState as object),
-            isHydrated: true,
-            apiKeys: migratedApiKeys,
-            ignoreAtTagWhenCopyingAndGenerating,
-            grsaiNanoBananaProModel: normalizeGrsaiNanoBananaProModel(
-              state.grsaiNanoBananaProModel
-            ),
-            hideProviderGuidePopover: state.hideProviderGuidePopover ?? false,
-            canvasEdgeRoutingMode: normalizeCanvasEdgeRoutingMode(state.canvasEdgeRoutingMode),
-            autoCheckAppUpdateOnLaunch: state.autoCheckAppUpdateOnLaunch ?? true,
-            enableUpdateDialog: state.enableUpdateDialog ?? true,
-            enableStoryboardGenGridPreviewShortcut:
-              state.enableStoryboardGenGridPreviewShortcut ?? false,
-            showStoryboardGenAdvancedRatioControls:
-              state.showStoryboardGenAdvancedRatioControls ?? false,
-            storyboardGenAutoInferEmptyFrame: state.storyboardGenAutoInferEmptyFrame ?? true,
-            showNodePrice: state.showNodePrice ?? true,
-            priceDisplayCurrencyMode: normalizePriceDisplayCurrencyMode(
-              state.priceDisplayCurrencyMode
-            ),
-            usdToCnyRate: normalizeUsdToCnyRate(state.usdToCnyRate),
-            preferDiscountedPrice: state.preferDiscountedPrice ?? false,
-            grsaiCreditTierId: normalizeGrsaiCreditTierId(state.grsaiCreditTierId),
-          };
+function schedulePersist(getState: () => SettingsState) {
+  if (_persistTimer) clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(() => {
+    _persistTimer = null;
+    void persistToSQLite(getState());
+  }, 300);
+}
+
+async function persistToSQLite(state: SettingsState) {
+  const payload: PersistedSettings = {
+    apiKeys: state.apiKeys,
+    grsaiNanoBananaProModel: state.grsaiNanoBananaProModel,
+    hideProviderGuidePopover: state.hideProviderGuidePopover,
+    downloadPresetPaths: state.downloadPresetPaths,
+    useUploadFilenameAsNodeTitle: state.useUploadFilenameAsNodeTitle,
+    storyboardGenKeepStyleConsistent: state.storyboardGenKeepStyleConsistent,
+    storyboardGenDisableTextInImage: state.storyboardGenDisableTextInImage,
+    storyboardGenAutoInferEmptyFrame: state.storyboardGenAutoInferEmptyFrame,
+    ignoreAtTagWhenCopyingAndGenerating: state.ignoreAtTagWhenCopyingAndGenerating,
+    enableStoryboardGenGridPreviewShortcut: state.enableStoryboardGenGridPreviewShortcut,
+    showStoryboardGenAdvancedRatioControls: state.showStoryboardGenAdvancedRatioControls,
+    showNodePrice: state.showNodePrice,
+    priceDisplayCurrencyMode: state.priceDisplayCurrencyMode,
+    usdToCnyRate: state.usdToCnyRate,
+    preferDiscountedPrice: state.preferDiscountedPrice,
+    grsaiCreditTierId: state.grsaiCreditTierId,
+    uiRadiusPreset: state.uiRadiusPreset,
+    themeTonePreset: state.themeTonePreset,
+    accentColor: state.accentColor,
+    canvasEdgeRoutingMode: state.canvasEdgeRoutingMode,
+    autoCheckAppUpdateOnLaunch: state.autoCheckAppUpdateOnLaunch,
+    enableUpdateDialog: state.enableUpdateDialog,
+  };
+  try {
+    await setUserSettings({ [SETTINGS_STORAGE_KEY]: JSON.stringify(payload) });
+  } catch (e) {
+    console.error('[settingsStore] failed to persist settings to SQLite', e);
+  }
+}
+
+function migratePersistedSettings(raw: PersistedSettings): MigratedSettings {
+  return {
+    apiKeys: normalizeApiKeys(raw.apiKeys),
+    grsaiNanoBananaProModel: normalizeGrsaiNanoBananaProModel(raw.grsaiNanoBananaProModel),
+    hideProviderGuidePopover: raw.hideProviderGuidePopover ?? false,
+    downloadPresetPaths: raw.downloadPresetPaths ?? [],
+    useUploadFilenameAsNodeTitle: raw.useUploadFilenameAsNodeTitle ?? true,
+    storyboardGenKeepStyleConsistent: raw.storyboardGenKeepStyleConsistent ?? true,
+    storyboardGenDisableTextInImage: raw.storyboardGenDisableTextInImage ?? true,
+    storyboardGenAutoInferEmptyFrame: raw.storyboardGenAutoInferEmptyFrame ?? true,
+    ignoreAtTagWhenCopyingAndGenerating: raw.ignoreAtTagWhenCopyingAndGenerating ?? true,
+    enableStoryboardGenGridPreviewShortcut: raw.enableStoryboardGenGridPreviewShortcut ?? false,
+    showStoryboardGenAdvancedRatioControls: raw.showStoryboardGenAdvancedRatioControls ?? false,
+    showNodePrice: raw.showNodePrice ?? true,
+    priceDisplayCurrencyMode: normalizePriceDisplayCurrencyMode(raw.priceDisplayCurrencyMode),
+    usdToCnyRate: normalizeUsdToCnyRate(raw.usdToCnyRate),
+    preferDiscountedPrice: raw.preferDiscountedPrice ?? false,
+    grsaiCreditTierId: normalizeGrsaiCreditTierId(raw.grsaiCreditTierId),
+    uiRadiusPreset: raw.uiRadiusPreset ?? 'default',
+    themeTonePreset: raw.themeTonePreset ?? 'neutral',
+    accentColor: raw.accentColor ? normalizeHexColor(raw.accentColor) : '#3B82F6',
+    canvasEdgeRoutingMode: normalizeCanvasEdgeRoutingMode(raw.canvasEdgeRoutingMode),
+    autoCheckAppUpdateOnLaunch: raw.autoCheckAppUpdateOnLaunch ?? true,
+    enableUpdateDialog: raw.enableUpdateDialog ?? true,
+  };
+}
+
+function tryMigrateFromLocalStorage(): MigratedSettings | null {
+  if (isDesktopPlatform()) {
+    try {
+      const raw = localStorage.getItem('settings-storage');
+      if (raw) {
+        const parsed = JSON.parse(raw) as { state?: PersistedSettings; version?: number };
+        const legacyState = parsed.state ?? parsed;
+        if (legacyState && typeof legacyState === 'object') {
+          localStorage.removeItem('settings-storage');
+          return migratePersistedSettings(legacyState as PersistedSettings);
         }
-
-        return {
-          ...(persistedState as object),
-          isHydrated: true,
-          apiKeys: state.apiKey ? { ppio: normalizeApiKey(state.apiKey) } : {},
-          ignoreAtTagWhenCopyingAndGenerating,
-          grsaiNanoBananaProModel: normalizeGrsaiNanoBananaProModel(
-            state.grsaiNanoBananaProModel
-          ),
-          hideProviderGuidePopover: state.hideProviderGuidePopover ?? false,
-          canvasEdgeRoutingMode: normalizeCanvasEdgeRoutingMode(state.canvasEdgeRoutingMode),
-          autoCheckAppUpdateOnLaunch: state.autoCheckAppUpdateOnLaunch ?? true,
-          enableUpdateDialog: state.enableUpdateDialog ?? true,
-          enableStoryboardGenGridPreviewShortcut:
-            state.enableStoryboardGenGridPreviewShortcut ?? false,
-          showStoryboardGenAdvancedRatioControls:
-            state.showStoryboardGenAdvancedRatioControls ?? false,
-          storyboardGenAutoInferEmptyFrame: state.storyboardGenAutoInferEmptyFrame ?? true,
-          showNodePrice: state.showNodePrice ?? true,
-          priceDisplayCurrencyMode: normalizePriceDisplayCurrencyMode(
-            state.priceDisplayCurrencyMode
-          ),
-          usdToCnyRate: normalizeUsdToCnyRate(state.usdToCnyRate),
-          preferDiscountedPrice: state.preferDiscountedPrice ?? false,
-          grsaiCreditTierId: normalizeGrsaiCreditTierId(state.grsaiCreditTierId),
-        };
-      },
+      }
+    } catch {
+      // ignore
     }
-  )
-);
+  }
+  return null;
+}
+
+export const useSettingsStore = create<SettingsState>()((set, get) => ({
+  isHydrated: false,
+  apiKeys: {},
+  grsaiNanoBananaProModel: DEFAULT_GRSAI_NANO_BANANA_PRO_MODEL,
+  hideProviderGuidePopover: false,
+  downloadPresetPaths: [],
+  useUploadFilenameAsNodeTitle: true,
+  storyboardGenKeepStyleConsistent: true,
+  storyboardGenDisableTextInImage: true,
+  storyboardGenAutoInferEmptyFrame: true,
+  ignoreAtTagWhenCopyingAndGenerating: true,
+  enableStoryboardGenGridPreviewShortcut: false,
+  showStoryboardGenAdvancedRatioControls: false,
+  showNodePrice: true,
+  priceDisplayCurrencyMode: 'auto',
+  usdToCnyRate: 7.2,
+  preferDiscountedPrice: false,
+  grsaiCreditTierId: DEFAULT_GRSAI_CREDIT_TIER_ID,
+  uiRadiusPreset: 'default',
+  themeTonePreset: 'neutral',
+  accentColor: '#3B82F6',
+  canvasEdgeRoutingMode: 'spline',
+  autoCheckAppUpdateOnLaunch: true,
+  enableUpdateDialog: true,
+
+  loadSettings: async () => {
+    try {
+      const stored = await getUserSettings();
+      const rawJson = stored[SETTINGS_STORAGE_KEY];
+      if (rawJson) {
+        const parsed = JSON.parse(rawJson) as PersistedSettings;
+        const migrated = migratePersistedSettings(parsed);
+        set({ ...migrated, isHydrated: true });
+        return;
+      }
+
+      const legacy = tryMigrateFromLocalStorage();
+      if (legacy) {
+        set({ ...legacy, isHydrated: true });
+        void persistToSQLite({ ...get(), ...legacy });
+        return;
+      }
+    } catch (e) {
+      console.error('[settingsStore] failed to load settings from SQLite', e);
+    }
+    set({ isHydrated: true });
+  },
+
+  setProviderApiKey: (providerId, key) => {
+    set((state) => ({
+      apiKeys: {
+        ...state.apiKeys,
+        [providerId]: normalizeApiKey(key),
+      },
+    }));
+    schedulePersist(get);
+  },
+  setGrsaiNanoBananaProModel: (model) => {
+    set({ grsaiNanoBananaProModel: normalizeGrsaiNanoBananaProModel(model) });
+    schedulePersist(get);
+  },
+  setHideProviderGuidePopover: (hide) => {
+    set({ hideProviderGuidePopover: hide });
+    schedulePersist(get);
+  },
+  setDownloadPresetPaths: (paths) => {
+    const uniquePaths = Array.from(
+      new Set(paths.map((path) => path.trim()).filter((path) => path.length > 0))
+    ).slice(0, 8);
+    set({ downloadPresetPaths: uniquePaths });
+    schedulePersist(get);
+  },
+  setUseUploadFilenameAsNodeTitle: (enabled) => {
+    set({ useUploadFilenameAsNodeTitle: enabled });
+    schedulePersist(get);
+  },
+  setStoryboardGenKeepStyleConsistent: (enabled) => {
+    set({ storyboardGenKeepStyleConsistent: enabled });
+    schedulePersist(get);
+  },
+  setStoryboardGenDisableTextInImage: (enabled) => {
+    set({ storyboardGenDisableTextInImage: enabled });
+    schedulePersist(get);
+  },
+  setStoryboardGenAutoInferEmptyFrame: (enabled) => {
+    set({ storyboardGenAutoInferEmptyFrame: enabled });
+    schedulePersist(get);
+  },
+  setIgnoreAtTagWhenCopyingAndGenerating: (enabled) => {
+    set({ ignoreAtTagWhenCopyingAndGenerating: enabled });
+    schedulePersist(get);
+  },
+  setEnableStoryboardGenGridPreviewShortcut: (enabled) => {
+    set({ enableStoryboardGenGridPreviewShortcut: enabled });
+    schedulePersist(get);
+  },
+  setShowStoryboardGenAdvancedRatioControls: (enabled) => {
+    set({ showStoryboardGenAdvancedRatioControls: enabled });
+    schedulePersist(get);
+  },
+  setShowNodePrice: (enabled) => {
+    set({ showNodePrice: enabled });
+    schedulePersist(get);
+  },
+  setPriceDisplayCurrencyMode: (priceDisplayCurrencyMode) => {
+    set({
+      priceDisplayCurrencyMode:
+        normalizePriceDisplayCurrencyMode(priceDisplayCurrencyMode),
+    });
+    schedulePersist(get);
+  },
+  setUsdToCnyRate: (usdToCnyRate) => {
+    set({ usdToCnyRate: normalizeUsdToCnyRate(usdToCnyRate) });
+    schedulePersist(get);
+  },
+  setPreferDiscountedPrice: (enabled) => {
+    set({ preferDiscountedPrice: enabled });
+    schedulePersist(get);
+  },
+  setGrsaiCreditTierId: (grsaiCreditTierId) => {
+    set({ grsaiCreditTierId: normalizeGrsaiCreditTierId(grsaiCreditTierId) });
+    schedulePersist(get);
+  },
+  setUiRadiusPreset: (uiRadiusPreset) => {
+    set({ uiRadiusPreset });
+    schedulePersist(get);
+  },
+  setThemeTonePreset: (themeTonePreset) => {
+    set({ themeTonePreset });
+    schedulePersist(get);
+  },
+  setAccentColor: (color) => {
+    set({ accentColor: normalizeHexColor(color) });
+    schedulePersist(get);
+  },
+  setCanvasEdgeRoutingMode: (canvasEdgeRoutingMode) => {
+    set({ canvasEdgeRoutingMode: normalizeCanvasEdgeRoutingMode(canvasEdgeRoutingMode) });
+    schedulePersist(get);
+  },
+  setAutoCheckAppUpdateOnLaunch: (enabled) => {
+    set({ autoCheckAppUpdateOnLaunch: enabled });
+    schedulePersist(get);
+  },
+  setEnableUpdateDialog: (enabled) => {
+    set({ enableUpdateDialog: enabled });
+    schedulePersist(get);
+  },
+}));

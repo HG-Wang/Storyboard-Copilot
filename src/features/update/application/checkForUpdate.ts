@@ -1,5 +1,6 @@
 import { getDesktopAppVersion, isDesktopPlatform } from '@/lib/platform';
 import { checkLatestReleaseTag } from '../../../commands/update';
+import { getUserSettings, setUserSettings } from '@/commands/userSettings';
 
 const GITHUB_LATEST_RELEASE_API = 'https://api.github.com/repos/henjicc/Storyboard-Copilot/releases/latest';
 const VERSION_SUPPRESSION_STORAGE_KEY = 'storyboard:update-check:version-suppressions';
@@ -34,55 +35,93 @@ function getLocalDateKey(now: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function readVersionSuppressions(): VersionSuppressionMap {
-  try {
-    const raw = localStorage.getItem(VERSION_SUPPRESSION_STORAGE_KEY);
-    if (!raw) {
-      return {};
-    }
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object') {
-      return {};
-    }
+let _cachedSuppressions: VersionSuppressionMap | null = null;
 
-    return Object.entries(parsed as Record<string, unknown>).reduce<VersionSuppressionMap>(
-      (acc, [version, value]) => {
-        if (!version || typeof value !== 'object' || value === null) {
-          return acc;
+async function readVersionSuppressions(): Promise<VersionSuppressionMap> {
+  if (_cachedSuppressions) return _cachedSuppressions;
+
+  try {
+    if (isDesktopPlatform()) {
+      const stored = await getUserSettings();
+      const raw = stored[VERSION_SUPPRESSION_STORAGE_KEY];
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (parsed && typeof parsed === 'object') {
+          _cachedSuppressions = parseSuppressionMap(parsed as Record<string, unknown>);
+          return _cachedSuppressions;
         }
-        const mode = (value as { mode?: unknown }).mode;
-        if (mode !== 'today' && mode !== 'forever') {
-          return acc;
+      }
+
+      const legacyRaw = localStorage.getItem(VERSION_SUPPRESSION_STORAGE_KEY);
+      if (legacyRaw) {
+        const parsed = JSON.parse(legacyRaw) as unknown;
+        if (parsed && typeof parsed === 'object') {
+          const map = parseSuppressionMap(parsed as Record<string, unknown>);
+          _cachedSuppressions = map;
+          void persistVersionSuppressions(map);
+          localStorage.removeItem(VERSION_SUPPRESSION_STORAGE_KEY);
+          return map;
         }
-        const dayKey = (value as { dayKey?: unknown }).dayKey;
-        acc[version] = {
-          mode,
-          dayKey: typeof dayKey === 'string' ? dayKey : undefined,
-        };
-        return acc;
-      },
-      {}
-    );
+      }
+    } else {
+      const raw = localStorage.getItem(VERSION_SUPPRESSION_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (parsed && typeof parsed === 'object') {
+          _cachedSuppressions = parseSuppressionMap(parsed as Record<string, unknown>);
+          return _cachedSuppressions;
+        }
+      }
+    }
   } catch {
-    return {};
+    // ignore
   }
+
+  _cachedSuppressions = {};
+  return _cachedSuppressions;
 }
 
-function writeVersionSuppressions(map: VersionSuppressionMap): void {
+function parseSuppressionMap(parsed: Record<string, unknown>): VersionSuppressionMap {
+  return Object.entries(parsed).reduce<VersionSuppressionMap>(
+    (acc, [version, value]) => {
+      if (!version || typeof value !== 'object' || value === null) {
+        return acc;
+      }
+      const mode = (value as { mode?: unknown }).mode;
+      if (mode !== 'today' && mode !== 'forever') {
+        return acc;
+      }
+      const dayKey = (value as { dayKey?: unknown }).dayKey;
+      acc[version] = {
+        mode,
+        dayKey: typeof dayKey === 'string' ? dayKey : undefined,
+      };
+      return acc;
+    },
+    {}
+  );
+}
+
+async function persistVersionSuppressions(map: VersionSuppressionMap): Promise<void> {
+  const json = JSON.stringify(map);
   try {
-    localStorage.setItem(VERSION_SUPPRESSION_STORAGE_KEY, JSON.stringify(map));
+    if (isDesktopPlatform()) {
+      await setUserSettings({ [VERSION_SUPPRESSION_STORAGE_KEY]: json });
+    } else {
+      localStorage.setItem(VERSION_SUPPRESSION_STORAGE_KEY, json);
+    }
   } catch {
     // ignore storage failures
   }
 }
 
-export function suppressUpdateVersion(version: string, mode: VersionSuppressionMode): void {
+export async function suppressUpdateVersion(version: string, mode: VersionSuppressionMode): Promise<void> {
   const normalized = normalizeVersion(version);
   if (!normalized) {
     return;
   }
 
-  const map = readVersionSuppressions();
+  const map = await readVersionSuppressions();
   map[normalized] =
     mode === 'today'
       ? {
@@ -91,16 +130,17 @@ export function suppressUpdateVersion(version: string, mode: VersionSuppressionM
         }
       : { mode: 'forever' };
 
-  writeVersionSuppressions(map);
+  _cachedSuppressions = map;
+  void persistVersionSuppressions(map);
 }
 
-export function isUpdateVersionSuppressed(version: string): boolean {
+export async function isUpdateVersionSuppressed(version: string): Promise<boolean> {
   const normalized = normalizeVersion(version);
   if (!normalized) {
     return false;
   }
 
-  const map = readVersionSuppressions();
+  const map = await readVersionSuppressions();
   const record = map[normalized];
   if (!record) {
     return false;
