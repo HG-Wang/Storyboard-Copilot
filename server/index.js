@@ -521,6 +521,70 @@ handleCommand('admin_usage_stats', async () => {
   return { byProvider, byDay };
 }, { auth: true, admin: true });
 
+// ==================== USER PROFILE ENDPOINTS ====================
+
+function buildUserProfile(targetUserId) {
+  const user = db.prepare('SELECT id, username, email, role, credits, created_at, updated_at FROM users WHERE id = ?').get(targetUserId);
+  if (!user) throw new Error('用户不存在');
+
+  const txnCount = db.prepare('SELECT COUNT(*) as c FROM credit_transactions WHERE user_id = ?').get(targetUserId).c;
+  const usageCount = db.prepare('SELECT COUNT(*) as c FROM ai_usage_log WHERE user_id = ?').get(targetUserId).c;
+  const successCount = db.prepare("SELECT COUNT(*) as c FROM ai_usage_log WHERE user_id = ? AND status='succeeded'").get(targetUserId).c;
+  const totalConsumed = db.prepare("SELECT COALESCE(SUM(credits_used),0) as c FROM ai_usage_log WHERE user_id = ? AND status='succeeded'").get(targetUserId).c;
+  const totalRecharged = db.prepare("SELECT COALESCE(SUM(amount),0) as c FROM credit_transactions WHERE user_id = ? AND amount > 0").get(targetUserId).c;
+  const totalRefunded = db.prepare("SELECT COALESCE(SUM(amount),0) as c FROM credit_transactions WHERE user_id = ? AND type='refund'").get(targetUserId).c;
+
+  const topModels = db.prepare(`
+    SELECT model, provider, COUNT(*) as count, SUM(credits_used) as total_credits
+    FROM ai_usage_log WHERE user_id = ? AND status='succeeded'
+    GROUP BY model ORDER BY count DESC LIMIT 10
+  `).all(targetUserId);
+
+  const byProvider = db.prepare(`
+    SELECT provider, COUNT(*) as count, SUM(credits_used) as credits
+    FROM ai_usage_log WHERE user_id = ? AND status='succeeded'
+    GROUP BY provider ORDER BY count DESC
+  `).all(targetUserId);
+
+  const byDay = db.prepare(`
+    SELECT DATE(created_at/1000, 'unixepoch', 'localtime') as day, COUNT(*) as count, SUM(credits_used) as credits
+    FROM ai_usage_log WHERE user_id = ? AND created_at > ?
+    GROUP BY day ORDER BY day DESC LIMIT 30
+  `).all(targetUserId, nowMs() - 30 * 86400000);
+
+  const recentTxns = db.prepare('SELECT * FROM credit_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').all(targetUserId);
+  const recentUsage = db.prepare('SELECT * FROM ai_usage_log WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').all(targetUserId);
+
+  const projectCount = db.prepare('SELECT COUNT(*) as c FROM projects WHERE user_id = ?').get(targetUserId).c;
+
+  return {
+    user: { id: user.id, username: user.username, email: user.email, role: user.role, credits: user.credits, created_at: user.created_at, updated_at: user.updated_at },
+    stats: {
+      txnCount, usageCount, successCount, totalConsumed, totalRecharged, totalRefunded, projectCount,
+      successRate: usageCount > 0 ? Math.round(successCount / usageCount * 100) : 0,
+    },
+    topModels, byProvider, byDay,
+    recentTxns, recentUsage,
+  };
+}
+
+handleCommand('user_profile', async (body, user) => {
+  return buildUserProfile(user.id);
+}, { auth: true });
+
+handleCommand('admin_user_profile', async ({ userId }) => {
+  return buildUserProfile(userId);
+}, { auth: true, admin: true });
+
+handleCommand('user_usage_log', async ({ page, pageSize }, user) => {
+  const p = Math.max(1, page || 1);
+  const ps = Math.min(50, Math.max(1, pageSize || 20));
+  const offset = (p - 1) * ps;
+  const total = db.prepare('SELECT COUNT(*) as count FROM ai_usage_log WHERE user_id = ?').get(user.id).count;
+  const rows = db.prepare('SELECT * FROM ai_usage_log WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?').all(user.id, ps, offset);
+  return { rows, total, page: p, pageSize: ps };
+}, { auth: true });
+
 // ==================== PUBLIC: MODEL LIST & PRICING ====================
 
 handleCommand('list_models', async () => {

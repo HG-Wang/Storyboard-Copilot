@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@/commands/transport';
-import { X, Users, CreditCard, Settings, BarChart3, Plus, Trash2, Power, LayoutDashboard, Search, Eye, Edit3, ChevronLeft, ChevronRight, TrendingUp, UserCheck, Zap, Coins, Package, Filter } from 'lucide-react';
+import { X, Users, CreditCard, Settings, BarChart3, Plus, Trash2, Power, LayoutDashboard, Search, Eye, Edit3, ChevronLeft, ChevronRight, TrendingUp, UserCheck, Zap, Coins, Package, Filter, UserCircle } from 'lucide-react';
 
-interface AdminPageProps { isOpen: boolean; onClose: () => void; }
+interface AdminPageProps { isOpen: boolean; onClose: () => void; onViewUserProfile?: (userId: string) => void; }
 
 type AdminTab = 'dashboard' | 'users' | 'providers' | 'pricing' | 'usage' | 'system';
 
@@ -79,7 +79,7 @@ const txnTypeColors: Record<string, string> = {
   signup_bonus: 'text-emerald-400', recharge: 'text-emerald-400', consume: 'text-amber-400', refund: 'text-blue-400', admin_deduct: 'text-red-400',
 };
 
-export function AdminPage({ isOpen, onClose }: AdminPageProps) {
+export function AdminPage({ isOpen, onClose, onViewUserProfile }: AdminPageProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<AdminTab>('dashboard');
 
@@ -116,7 +116,7 @@ export function AdminPage({ isOpen, onClose }: AdminPageProps) {
 
         <div className="flex-1 flex flex-col overflow-hidden">
           {tab === 'dashboard' && <DashboardTab />}
-          {tab === 'users' && <UsersTab />}
+          {tab === 'users' && <UsersTab onViewUserProfile={onViewUserProfile} />}
           {tab === 'providers' && <ProvidersTab />}
           {tab === 'pricing' && <PricingTab />}
           {tab === 'usage' && <UsageTab />}
@@ -217,7 +217,7 @@ function DashboardTab() {
 
 /* ==================== USERS TAB ==================== */
 
-function UsersTab() {
+function UsersTab({ onViewUserProfile }: { onViewUserProfile?: (userId: string) => void }) {
   const { t } = useTranslation();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
@@ -305,6 +305,10 @@ function UsersTab() {
           </div>
 
           <div className="flex gap-2">
+            <button onClick={() => onViewUserProfile?.(selectedUser.id)}
+              className="h-8 px-3 rounded bg-accent/10 text-accent text-xs hover:bg-accent/20 flex items-center gap-1.5">
+              <UserCircle className="w-3.5 h-3.5" />{t('profile.title')}
+            </button>
             <button onClick={() => { setRechargeTarget({ userId: selectedUser.id, username: selectedUser.username }); setActionType('recharge'); setRechargeAmount(''); setRechargeNote(''); }}
               className="h-8 px-3 rounded bg-emerald-500/10 text-emerald-400 text-xs hover:bg-emerald-500/20">{t('admin.recharge')}</button>
             <button onClick={() => { setRechargeTarget({ userId: selectedUser.id, username: selectedUser.username }); setActionType('deduct'); setRechargeAmount(''); setRechargeNote(''); }}
@@ -428,6 +432,8 @@ function UsersTab() {
                     <div className="flex items-center gap-1">
                       <button onClick={() => void loadUserDetail(u.id)} title={t('admin.viewDetail')}
                         className="h-7 w-7 flex items-center justify-center rounded text-text-muted hover:bg-bg-dark hover:text-text-dark"><Eye className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => onViewUserProfile?.(u.id)} title={t('profile.title')}
+                        className="h-7 w-7 flex items-center justify-center rounded text-text-muted hover:bg-bg-dark hover:text-accent"><UserCircle className="w-3.5 h-3.5" /></button>
                       <button onClick={() => { setRechargeTarget({ userId: u.id, username: u.username }); setActionType('recharge'); setRechargeAmount(''); setRechargeNote(''); }}
                         className="h-7 px-2 rounded text-xs bg-accent/10 text-accent hover:bg-accent/20">{t('admin.recharge')}</button>
                       <button onClick={() => void handleDeleteUser(u.id, u.username)}

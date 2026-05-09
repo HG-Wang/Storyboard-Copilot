@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Minus, X, Maximize2, Settings, ArrowLeft, Shield, LogOut, Coins } from 'lucide-react';
+import { Minus, X, Maximize2, Settings, ArrowLeft, Shield, LogOut, Coins, UserCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Moon, Sun, Languages } from 'lucide-react';
 import { useThemeStore } from '@/stores/themeStore';
@@ -18,11 +18,12 @@ type AppWindowRef = Awaited<ReturnType<typeof getDesktopWindow>> | null;
 interface TitleBarProps {
   onSettingsClick: () => void;
   onAdminClick?: () => void;
+  onProfileClick?: () => void;
   showBackButton?: boolean;
   onBackClick?: () => void;
 }
 
-export function TitleBar({ onSettingsClick, onAdminClick, showBackButton, onBackClick }: TitleBarProps) {
+export function TitleBar({ onSettingsClick, onAdminClick, onProfileClick, showBackButton, onBackClick }: TitleBarProps) {
   const { t, i18n } = useTranslation();
   const { theme, toggleTheme } = useThemeStore();
   const currentProjectName = useProjectStore((state) => state.currentProject?.name);
@@ -193,6 +194,17 @@ export function TitleBar({ onSettingsClick, onAdminClick, showBackButton, onBack
               <Coins className="w-3.5 h-3.5 text-amber-400" />
               <span className="font-mono text-text-dark">{authUser.credits}</span>
             </div>
+
+            {onProfileClick && (
+              <button
+                type="button"
+                onClick={onProfileClick}
+                className="h-full px-3 hover:bg-bg-dark transition-colors"
+                title={t('profile.title')}
+              >
+                <UserCircle className="w-4 h-4 text-text-muted" />
+              </button>
+            )}
 
             {authUser.role === 'admin' && onAdminClick && (
               <button

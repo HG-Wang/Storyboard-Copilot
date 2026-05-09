@@ -8,6 +8,7 @@ import { GlobalErrorDialog } from './components/GlobalErrorDialog';
 import { ProjectManager } from './features/project/ProjectManager';
 import { AuthPage } from './features/auth/AuthPage';
 import { AdminPage } from './features/admin/AdminPage';
+import { UserProfilePage } from './features/profile/UserProfilePage';
 import { useThemeStore } from './stores/themeStore';
 import { useProjectStore } from './stores/projectStore';
 import { useSettingsStore } from './stores/settingsStore';
@@ -54,6 +55,8 @@ function App() {
   const [currentVersion, setCurrentVersion] = useState<string>('');
   const [globalError, setGlobalError] = useState<GlobalErrorDialogDetail | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileViewUserId, setProfileViewUserId] = useState<string | undefined>();
 
   const isHydrated = useProjectStore((state) => state.isHydrated);
   const hydrate = useProjectStore((state) => state.hydrate);
@@ -241,12 +244,18 @@ function App() {
             setShowSettings(true);
           }}
           onAdminClick={() => setShowAdmin(true)}
+          onProfileClick={() => { setProfileViewUserId(undefined); setShowProfile(true); }}
           showBackButton={!!currentProjectId}
           onBackClick={closeProject}
         />
 
         <main className="flex-1 relative">
-          {currentProjectId ? <Canvas /> : <ProjectManager />}
+          {showProfile ? (
+            <UserProfilePage
+              onClose={() => { setShowProfile(false); setProfileViewUserId(undefined); }}
+              viewUserId={profileViewUserId}
+            />
+          ) : currentProjectId ? <Canvas /> : <ProjectManager />}
         </main>
 
         <SettingsDialog
@@ -273,6 +282,7 @@ function App() {
         <AdminPage
           isOpen={showAdmin}
           onClose={() => setShowAdmin(false)}
+          onViewUserProfile={(userId) => { setProfileViewUserId(userId); setShowProfile(true); }}
         />
       </div>
     </ReactFlowProvider>

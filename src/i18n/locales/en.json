@@ -411,6 +411,27 @@
     "systemInfo": "System Info",
     "dataDir": "Data Dir",
     "imagesDir": "Images Dir"
+  },
+  "profile": {
+    "title": "Profile",
+    "myProfile": "My Profile",
+    "profile": "Profile",
+    "overview": "Overview",
+    "transactions": "Transactions",
+    "usage": "Usage",
+    "userList": "Users",
+    "totalConsumed": "Total Consumed",
+    "totalRecharged": "Total Recharged",
+    "totalGenerations": "Total Generations",
+    "projectCount": "Projects",
+    "successCount": "Successes",
+    "txnCount": "Transactions",
+    "totalRefunded": "Total Refunded",
+    "failCount": "Failures",
+    "dailyUsage": "Last 30 Days Usage",
+    "topModels": "Top Models",
+    "providerBreakdown": "By Provider",
+    "noData": "No data yet"
   }
 }
 
