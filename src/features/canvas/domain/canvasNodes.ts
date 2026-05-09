@@ -5,6 +5,7 @@ export const CANVAS_NODE_TYPES = {
   imageEdit: 'imageNode',
   exportImage: 'exportImageNode',
   textAnnotation: 'textAnnotationNode',
+  textGen: 'textGenNode',
   group: 'groupNode',
   storyboardSplit: 'storyboardNode',
   storyboardGen: 'storyboardGenNode',
@@ -66,6 +67,16 @@ export interface GroupNodeData extends NodeDisplayData {
 
 export interface TextAnnotationNodeData extends NodeDisplayData {
   content: string;
+  [key: string]: unknown;
+}
+
+export interface TextGenNodeData extends NodeDisplayData {
+  prompt: string;
+  systemPrompt: string;
+  model: string;
+  generatedContent: string;
+  isGenerating?: boolean;
+  generationStartedAt?: number | null;
   [key: string]: unknown;
 }
 
@@ -144,6 +155,7 @@ export type CanvasNodeData =
   | UploadImageNodeData
   | ExportImageNodeData
   | TextAnnotationNodeData
+  | TextGenNodeData
   | GroupNodeData
   | ImageEditNodeData
   | StoryboardSplitNodeData
@@ -218,6 +230,12 @@ export function isStoryboardGenNode(
   node: CanvasNode | null | undefined
 ): node is Node<StoryboardGenNodeData, typeof CANVAS_NODE_TYPES.storyboardGen> {
   return node?.type === CANVAS_NODE_TYPES.storyboardGen;
+}
+
+export function isTextGenNode(
+  node: CanvasNode | null | undefined
+): node is Node<TextGenNodeData, typeof CANVAS_NODE_TYPES.textGen> {
+  return node?.type === CANVAS_NODE_TYPES.textGen;
 }
 
 export function nodeHasImage(node: CanvasNode | null | undefined): boolean {

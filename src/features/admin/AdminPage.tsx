@@ -5,7 +5,7 @@ import { X, Users, CreditCard, Settings, BarChart3, Plus, Trash2, Power, LayoutD
 
 interface AdminPageProps { isOpen: boolean; onClose: () => void; onViewUserProfile?: (userId: string) => void; }
 
-type AdminTab = 'dashboard' | 'users' | 'providers' | 'pricing' | 'usage' | 'system';
+type AdminTab = 'dashboard' | 'users' | 'providers' | 'pricing' | 'textPricing' | 'usage' | 'system';
 
 interface AdminUser {
   id: string; username: string; email: string | null; role: string;
@@ -88,6 +88,7 @@ export function AdminPage({ isOpen, onClose, onViewUserProfile }: AdminPageProps
     { key: 'users' as AdminTab, label: t('admin.users'), icon: Users },
     { key: 'providers' as AdminTab, label: t('admin.providers'), icon: Settings },
     { key: 'pricing' as AdminTab, label: t('admin.pricing'), icon: CreditCard },
+    { key: 'textPricing' as AdminTab, label: t('admin.textPricing'), icon: CreditCard },
     { key: 'usage' as AdminTab, label: t('admin.usage'), icon: BarChart3 },
     { key: 'system' as AdminTab, label: t('admin.system'), icon: Package },
   ];
@@ -119,6 +120,7 @@ export function AdminPage({ isOpen, onClose, onViewUserProfile }: AdminPageProps
           {tab === 'users' && <UsersTab onViewUserProfile={onViewUserProfile} />}
           {tab === 'providers' && <ProvidersTab />}
           {tab === 'pricing' && <PricingTab />}
+          {tab === 'textPricing' && <TextPricingTab />}
           {tab === 'usage' && <UsageTab />}
           {tab === 'system' && <SystemTab />}
         </div>
@@ -810,6 +812,161 @@ function PricingTab() {
           <button onClick={() => setEditing({ model_id: '', provider_id: '', display_name: '', credits_per_image: 1 })}
             className="w-full rounded-lg border border-dashed border-border-dark p-4 text-sm text-text-muted hover:text-text-dark hover:border-accent/50 transition-colors flex items-center justify-center gap-2">
             <Plus className="w-4 h-4" />{t('admin.addPricing')}
+          </button>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* ==================== TEXT PRICING TAB ==================== */
+
+interface TextModelPricing {
+  model_id: string; provider_id: string; display_name: string; credits_per_request: number; max_tokens: number;
+}
+
+function TextPricingTab() {
+  const { t } = useTranslation();
+  const [pricing, setPricing] = useState<TextModelPricing[]>([]);
+  const [editing, setEditing] = useState<Partial<TextModelPricing> | null>(null);
+  const [inlineEdit, setInlineEdit] = useState<{ modelId: string; field: 'credits' | 'tokens'; value: string } | null>(null);
+
+  const load = useCallback(async () => {
+    try { setPricing(await invoke<TextModelPricing[]>('admin_list_text_pricing')); } catch (e) { console.error(e); }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const handleSave = async () => {
+    if (!editing?.model_id || !editing?.provider_id) return;
+    try {
+      await invoke('admin_save_text_pricing', {
+        ...editing,
+        credits_per_request: editing.credits_per_request || 1,
+        max_tokens: editing.max_tokens || 4096,
+      });
+      setEditing(null);
+      void load();
+    } catch (e) { alert(e instanceof Error ? e.message : '操作失败'); }
+  };
+
+  const handleInlineSave = async (modelId: string) => {
+    if (!inlineEdit || inlineEdit.modelId !== modelId) return;
+    const val = parseInt(inlineEdit.value, 10);
+    if (isNaN(val) || val < 1) return;
+    const existing = pricing.find(p => p.model_id === modelId);
+    if (!existing) return;
+    try {
+      const update = inlineEdit.field === 'credits'
+        ? { ...existing, credits_per_request: val }
+        : { ...existing, max_tokens: val };
+      await invoke('admin_save_text_pricing', update);
+      setInlineEdit(null);
+      void load();
+    } catch (e) { alert(e instanceof Error ? e.message : '操作失败'); }
+  };
+
+  const handleDelete = async (modelId: string) => {
+    if (!confirm(`确认删除文生文模型「${modelId}」？`)) return;
+    try { await invoke('admin_delete_text_pricing', { model_id: modelId }); void load(); } catch (e) { alert(e instanceof Error ? e.message : '操作失败'); }
+  };
+
+  const grouped = pricing.reduce<Record<string, TextModelPricing[]>>((acc, p) => {
+    (acc[p.provider_id] ??= []).push(p);
+    return acc;
+  }, {});
+
+  return (
+    <>
+      <div className="px-6 py-4 border-b border-border-dark">
+        <h2 className="text-lg font-semibold text-text-dark">{t('admin.textPricing')}</h2>
+        <p className="text-xs text-text-muted mt-1">{t('admin.textPricingDesc')}</p>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {Object.entries(grouped).map(([providerId, models]) => (
+          <div key={providerId} className="rounded-lg border border-border-dark bg-bg-dark overflow-hidden">
+            <div className="px-4 py-2.5 bg-surface-dark border-b border-border-dark flex items-center gap-2">
+              <span className="text-sm font-medium text-text-dark">{providerId}</span>
+              <span className="text-xs text-text-muted">({models.length} {t('admin.models')})</span>
+            </div>
+            <div className="divide-y divide-border-dark/50">
+              {models.map((p) => (
+                <div key={p.model_id} className="px-4 py-2.5 flex items-center justify-between hover:bg-surface-dark/50">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-text-dark">{p.display_name}</div>
+                    <div className="text-xs text-text-muted font-mono">{p.model_id}</div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {inlineEdit?.modelId === p.model_id && inlineEdit.field === 'credits' ? (
+                      <div className="flex items-center gap-1">
+                        <input type="number" min="1" value={inlineEdit.value} onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                          className="h-7 w-16 rounded border border-accent bg-bg-dark px-2 text-xs text-text-dark text-center font-mono"
+                          onKeyDown={(e) => { if (e.key === 'Enter') void handleInlineSave(p.model_id); if (e.key === 'Escape') setInlineEdit(null); }}
+                          autoFocus />
+                        <button onClick={() => void handleInlineSave(p.model_id)} className="h-7 px-2 rounded bg-accent text-white text-xs">OK</button>
+                        <button onClick={() => setInlineEdit(null)} className="h-7 px-2 rounded text-xs text-text-muted hover:bg-bg-dark">✕</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setInlineEdit({ modelId: p.model_id, field: 'credits', value: String(p.credits_per_request) })}
+                        className="text-sm font-mono text-accent hover:underline cursor-pointer px-2 py-0.5 rounded hover:bg-accent/5">
+                        {p.credits_per_request} <span className="text-xs text-text-muted">{t('admin.creditsPerRequest')}</span>
+                      </button>
+                    )}
+                    {inlineEdit?.modelId === p.model_id && inlineEdit.field === 'tokens' ? (
+                      <div className="flex items-center gap-1">
+                        <input type="number" min="1" value={inlineEdit.value} onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                          className="h-7 w-20 rounded border border-accent bg-bg-dark px-2 text-xs text-text-dark text-center font-mono"
+                          onKeyDown={(e) => { if (e.key === 'Enter') void handleInlineSave(p.model_id); if (e.key === 'Escape') setInlineEdit(null); }}
+                          autoFocus />
+                        <button onClick={() => void handleInlineSave(p.model_id)} className="h-7 px-2 rounded bg-accent text-white text-xs">OK</button>
+                        <button onClick={() => setInlineEdit(null)} className="h-7 px-2 rounded text-xs text-text-muted hover:bg-bg-dark">✕</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setInlineEdit({ modelId: p.model_id, field: 'tokens', value: String(p.max_tokens) })}
+                        className="text-xs font-mono text-text-muted hover:underline cursor-pointer px-2 py-0.5 rounded hover:bg-bg-dark/50">
+                        {p.max_tokens} <span className="text-[10px]">{t('admin.maxTokens')}</span>
+                      </button>
+                    )}
+                    <button onClick={() => void handleDelete(p.model_id)}
+                      className="h-7 w-7 flex items-center justify-center rounded text-red-400 hover:bg-red-500/10">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {editing ? (
+          <div className="rounded-lg border border-accent/30 bg-bg-dark p-4 space-y-3">
+            <div className="text-sm font-medium text-text-dark">{t('admin.addTextPricing')}</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs text-text-muted mb-1 block">Model ID</label>
+                <input value={editing.model_id || ''} onChange={(e) => setEditing(prev => ({ ...prev!, model_id: e.target.value }))}
+                  placeholder="openai/gpt-4o" className="h-8 w-full rounded border border-border-dark bg-surface-dark px-2 text-xs text-text-dark font-mono" /></div>
+              <div><label className="text-xs text-text-muted mb-1 block">Provider ID</label>
+                <input value={editing.provider_id || ''} onChange={(e) => setEditing(prev => ({ ...prev!, provider_id: e.target.value }))}
+                  placeholder="openai" className="h-8 w-full rounded border border-border-dark bg-surface-dark px-2 text-xs text-text-dark" /></div>
+              <div><label className="text-xs text-text-muted mb-1 block">{t('admin.displayName')}</label>
+                <input value={editing.display_name || ''} onChange={(e) => setEditing(prev => ({ ...prev!, display_name: e.target.value }))}
+                  className="h-8 w-full rounded border border-border-dark bg-surface-dark px-2 text-xs text-text-dark" /></div>
+              <div><label className="text-xs text-text-muted mb-1 block">{t('admin.creditsPerRequest')}</label>
+                <input type="number" min="1" value={editing.credits_per_request || 1} onChange={(e) => setEditing(prev => ({ ...prev!, credits_per_request: parseInt(e.target.value, 10) || 1 }))}
+                  className="h-8 w-full rounded border border-border-dark bg-surface-dark px-2 text-xs text-text-dark" /></div>
+              <div><label className="text-xs text-text-muted mb-1 block">{t('admin.maxTokens')}</label>
+                <input type="number" min="1" value={editing.max_tokens || 4096} onChange={(e) => setEditing(prev => ({ ...prev!, max_tokens: parseInt(e.target.value, 10) || 4096 }))}
+                  className="h-8 w-full rounded border border-border-dark bg-surface-dark px-2 text-xs text-text-dark" /></div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => void handleSave()} className="h-8 px-4 rounded bg-accent text-white text-xs hover:bg-accent/80">{t('common.save')}</button>
+              <button onClick={() => setEditing(null)} className="h-8 px-4 rounded border border-border-dark text-xs text-text-muted hover:bg-bg-dark">{t('common.cancel')}</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setEditing({ model_id: '', provider_id: '', display_name: '', credits_per_request: 1, max_tokens: 4096 })}
+            className="w-full rounded-lg border border-dashed border-border-dark p-4 text-sm text-text-muted hover:text-text-dark hover:border-accent/50 transition-colors flex items-center justify-center gap-2">
+            <Plus className="w-4 h-4" />{t('admin.addTextPricing')}
           </button>
         )}
       </div>

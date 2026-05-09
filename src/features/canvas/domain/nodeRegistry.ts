@@ -11,6 +11,7 @@ import {
   type StoryboardSplitNodeData,
   type StoryboardGenNodeData,
   type TextAnnotationNodeData,
+  type TextGenNodeData,
   type UploadImageNodeData,
 } from './canvasNodes';
 import { DEFAULT_NODE_DISPLAY_NAME } from './nodeDisplay';
@@ -176,6 +177,36 @@ const textAnnotationNodeDefinition: CanvasNodeDefinition<TextAnnotationNodeData>
   }),
 };
 
+const DEFAULT_TEXT_MODEL_ID = 'openai/gpt-4o-mini';
+
+const textGenNodeDefinition: CanvasNodeDefinition<TextGenNodeData> = {
+  type: CANVAS_NODE_TYPES.textGen,
+  menuLabelKey: 'node.menu.textGen',
+  menuIcon: 'sparkles',
+  visibleInMenu: true,
+  capabilities: {
+    toolbar: true,
+    promptInput: false,
+  },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: true,
+    connectMenu: {
+      fromSource: true,
+      fromTarget: true,
+    },
+  },
+  createDefaultData: () => ({
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.textGen],
+    prompt: '',
+    systemPrompt: '',
+    model: DEFAULT_TEXT_MODEL_ID,
+    generatedContent: '',
+    isGenerating: false,
+    generationStartedAt: null,
+  }),
+};
+
 const storyboardSplitDefinition: CanvasNodeDefinition<StoryboardSplitNodeData> = {
   type: CANVAS_NODE_TYPES.storyboardSplit,
   menuLabelKey: 'node.menu.storyboard',
@@ -256,6 +287,7 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.imageEdit]: imageEditNodeDefinition,
   [CANVAS_NODE_TYPES.exportImage]: exportImageNodeDefinition,
   [CANVAS_NODE_TYPES.textAnnotation]: textAnnotationNodeDefinition,
+  [CANVAS_NODE_TYPES.textGen]: textGenNodeDefinition,
   [CANVAS_NODE_TYPES.group]: groupNodeDefinition,
   [CANVAS_NODE_TYPES.storyboardSplit]: storyboardSplitDefinition,
   [CANVAS_NODE_TYPES.storyboardGen]: storyboardGenNodeDefinition,

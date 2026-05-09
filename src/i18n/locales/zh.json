@@ -90,7 +90,8 @@
       "aiImageGeneration": "AI 图片",
       "storyboard": "分镜节点",
       "storyboardGen": "分镜生成",
-      "textAnnotation": "文本注释"
+      "textAnnotation": "文本注释",
+      "textGen": "AI 文本"
     },
     "imageNode": {
       "title": "图片节点",
@@ -140,6 +141,14 @@
     "textAnnotation": {
       "placeholder": "输入 Markdown 文本，取消选中后会渲染预览",
       "empty": "空注释"
+    },
+    "textGen": {
+      "promptPlaceholder": "输入提示词，Ctrl/Cmd + Enter 生成",
+      "systemPromptPlaceholder": "系统提示词（选填）",
+      "generate": "生成",
+      "generating": "生成中...",
+      "regenerate": "重新生成",
+      "emptyHint": "输入提示词后点击生成"
     }
   },
   "viewer": {
@@ -410,7 +419,12 @@
     "maintenanceModeDesc": "开启后仅管理员可访问",
     "systemInfo": "系统信息",
     "dataDir": "数据目录",
-    "imagesDir": "图片目录"
+    "imagesDir": "图片目录",
+    "textPricing": "文生文定价",
+    "textPricingDesc": "配置文生文模型的积分定价",
+    "addTextPricing": "添加文生文模型",
+    "creditsPerRequest": "积分/次",
+    "maxTokens": "最大 Token"
   },
   "profile": {
     "title": "个人中心",

@@ -1,5 +1,6 @@
 import {
   generateImage,
+  generateText,
   getGenerateImageJob,
   setApiKey,
   submitGenerateImageJob,
@@ -48,4 +49,11 @@ export const tauriAiGateway: AiGateway = {
     });
   },
   getGenerateImageJob,
+  generateText: async (payload) => {
+    return await generateText({
+      prompt: payload.prompt,
+      model: payload.model,
+      system_prompt: payload.systemPrompt,
+    });
+  },
 };

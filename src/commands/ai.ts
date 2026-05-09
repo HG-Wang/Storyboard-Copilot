@@ -194,3 +194,41 @@ export async function getGenerateImageJob(jobId: string): Promise<GenerationJobS
 export async function listModels(): Promise<string[]> {
   return await invoke('list_models');
 }
+
+export interface TextGenerateRequest {
+  prompt: string;
+  model: string;
+  system_prompt?: string;
+  max_tokens?: number;
+  temperature?: number;
+}
+
+export async function generateText(request: TextGenerateRequest): Promise<string> {
+  const startedAt = performance.now();
+  console.info('[AI] generate_text request', {
+    prompt: truncateText(request.prompt, 240),
+    model: request.model,
+    tauri: isTauri(),
+  });
+
+  try {
+    const rawResult = await invoke<unknown>('generate_text', { request });
+    if (typeof rawResult !== 'string') {
+      throw createErrorWithDetails('Text generation returned non-string payload', String(rawResult));
+    }
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    console.info('[AI] generate_text success', { elapsedMs, resultLength: rawResult.length });
+    return rawResult;
+  } catch (error) {
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    const normalizedError = normalizeInvokeError(error);
+    console.error('[AI] generate_text failed', { elapsedMs, error, normalizedError });
+    const commandError: ErrorWithDetails = new Error(normalizedError.message);
+    commandError.details = normalizedError.details;
+    throw commandError;
+  }
+}
+
+export async function listTextModels(): Promise<Array<{ model_id: string; provider_id: string; display_name: string; credits_per_request: number; max_tokens: number }>> {
+  return await invoke('list_text_models');
+}

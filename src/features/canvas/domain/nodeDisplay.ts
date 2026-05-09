@@ -10,6 +10,7 @@ export const DEFAULT_NODE_DISPLAY_NAME: Record<CanvasNodeType, string> = {
   [CANVAS_NODE_TYPES.imageEdit]: 'AI 图片',
   [CANVAS_NODE_TYPES.exportImage]: '结果图片',
   [CANVAS_NODE_TYPES.textAnnotation]: '文本注释',
+  [CANVAS_NODE_TYPES.textGen]: 'AI 文本',
   [CANVAS_NODE_TYPES.group]: '分组',
   [CANVAS_NODE_TYPES.storyboardSplit]: '切割结果',
   [CANVAS_NODE_TYPES.storyboardGen]: '分镜生成',

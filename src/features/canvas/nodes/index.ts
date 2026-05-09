@@ -6,6 +6,7 @@ import { ImageNode } from './ImageNode';
 import { StoryboardGenNode } from './StoryboardGenNode';
 import { StoryboardNode } from './StoryboardNode';
 import { TextAnnotationNode } from './TextAnnotationNode';
+import { TextGenNode } from './TextGenNode';
 import { UploadNode } from './UploadNode';
 
 export const nodeTypes: NodeTypes = {
@@ -15,7 +16,8 @@ export const nodeTypes: NodeTypes = {
   storyboardGenNode: StoryboardGenNode,
   storyboardNode: StoryboardNode,
   textAnnotationNode: TextAnnotationNode,
+  textGenNode: TextGenNode,
   uploadNode: UploadNode,
 };
 
-export { GroupNode, ImageEditNode, ImageNode, StoryboardGenNode, StoryboardNode, TextAnnotationNode, UploadNode };
+export { GroupNode, ImageEditNode, ImageNode, StoryboardGenNode, StoryboardNode, TextAnnotationNode, TextGenNode, UploadNode };

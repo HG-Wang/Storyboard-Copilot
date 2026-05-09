@@ -50,6 +50,7 @@ export interface AiGateway {
     result?: string | null;
     error?: string | null;
   }>;
+  generateText: (payload: { prompt: string; model: string; systemPrompt?: string }) => Promise<string>;
 }
 
 export interface ImageSplitGateway {

@@ -90,7 +90,8 @@
       "aiImageGeneration": "AI Image",
       "storyboard": "Storyboard Node",
       "storyboardGen": "Storyboard Generation",
-      "textAnnotation": "Text Annotation"
+      "textAnnotation": "Text Annotation",
+      "textGen": "AI Text"
     },
     "imageNode": {
       "title": "Image Node",
@@ -140,6 +141,14 @@
     "textAnnotation": {
       "placeholder": "Write Markdown text. It will render when unselected.",
       "empty": "Empty note"
+    },
+    "textGen": {
+      "promptPlaceholder": "Enter prompt, Ctrl/Cmd + Enter to generate",
+      "systemPromptPlaceholder": "System prompt (optional)",
+      "generate": "Generate",
+      "generating": "Generating...",
+      "regenerate": "Regenerate",
+      "emptyHint": "Enter a prompt and click Generate"
     }
   },
   "viewer": {
@@ -410,7 +419,12 @@
     "maintenanceModeDesc": "When enabled, only admins can access",
     "systemInfo": "System Info",
     "dataDir": "Data Dir",
-    "imagesDir": "Images Dir"
+    "imagesDir": "Images Dir",
+    "textPricing": "Text Model Pricing",
+    "textPricingDesc": "Configure credit pricing for text generation models",
+    "addTextPricing": "Add Text Model",
+    "creditsPerRequest": "credits/req",
+    "maxTokens": "Max Tokens"
   },
   "profile": {
     "title": "Profile",

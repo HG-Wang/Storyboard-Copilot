@@ -59,3 +59,12 @@ export interface ImageModelDefinition {
     modeLabel: string;
   };
 }
+
+export interface TextModelDefinition {
+  id: string;
+  mediaType: 'text';
+  displayName: string;
+  providerId: string;
+  maxTokens: number;
+  creditsPerRequest: number;
+}

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ImageModelDefinition, ModelProviderDefinition } from './types';
+import type { ImageModelDefinition, ModelProviderDefinition, TextModelDefinition } from './types';
 import { invoke } from '@/commands/transport';
 import { isDesktopPlatform } from '@/lib/platform';
 
@@ -8,6 +8,14 @@ interface ServerModel {
   provider_id: string;
   display_name: string;
   credits_per_image: number;
+}
+
+interface ServerTextModel {
+  model_id: string;
+  provider_id: string;
+  display_name: string;
+  credits_per_request: number;
+  max_tokens: number;
 }
 
 const DEFAULT_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'];
@@ -35,8 +43,20 @@ function buildModelDef(sm: ServerModel): ImageModelDefinition {
   };
 }
 
+function buildTextModelDef(sm: ServerTextModel): TextModelDefinition {
+  return {
+    id: sm.model_id,
+    mediaType: 'text',
+    displayName: sm.display_name,
+    providerId: sm.provider_id,
+    maxTokens: sm.max_tokens,
+    creditsPerRequest: sm.credits_per_request,
+  };
+}
+
 interface ServerModelState {
   models: ImageModelDefinition[];
+  textModels: TextModelDefinition[];
   providers: ModelProviderDefinition[];
   loaded: boolean;
   load: () => Promise<void>;
@@ -44,6 +64,7 @@ interface ServerModelState {
 
 export const useServerModelStore = create<ServerModelState>((set, get) => ({
   models: [],
+  textModels: [],
   providers: [],
   loaded: false,
 
@@ -51,23 +72,37 @@ export const useServerModelStore = create<ServerModelState>((set, get) => ({
     if (get().loaded) return;
     if (isDesktopPlatform()) { set({ loaded: true }); return; }
     try {
-      const serverModels = await invoke<ServerModel[]>('list_models');
+      const [serverModels, serverTextModels] = await Promise.all([
+        invoke<ServerModel[]>('list_models'),
+        invoke<ServerTextModel[]>('list_text_models').catch(() => []),
+      ]);
+
+      const providerMap = new Map<string, ModelProviderDefinition>();
+
+      let models: ImageModelDefinition[] = [];
       if (Array.isArray(serverModels) && serverModels.length > 0) {
-        const models = serverModels.map(buildModelDef);
-        const providerMap = new Map<string, ModelProviderDefinition>();
+        models = serverModels.map(buildModelDef);
         for (const m of serverModels) {
           if (!providerMap.has(m.provider_id)) {
             providerMap.set(m.provider_id, { id: m.provider_id, name: m.provider_id, label: m.provider_id });
           }
         }
-        set({ models, providers: Array.from(providerMap.values()), loaded: true });
-      } else {
-        set({ loaded: true });
       }
+
+      let textModels: TextModelDefinition[] = [];
+      if (Array.isArray(serverTextModels) && serverTextModels.length > 0) {
+        textModels = serverTextModels.map(buildTextModelDef);
+        for (const m of serverTextModels) {
+          if (!providerMap.has(m.provider_id)) {
+            providerMap.set(m.provider_id, { id: m.provider_id, name: m.provider_id, label: m.provider_id });
+          }
+        }
+      }
+
+      set({ models, textModels, providers: Array.from(providerMap.values()), loaded: true });
     } catch (e) {
       console.warn('[serverModels] load failed:', e);
       set({ loaded: true });
     }
   },
 }));
-
