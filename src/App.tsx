@@ -177,7 +177,7 @@ function App() {
       }
       const result = await checkForUpdate();
       if (!cancelled && result.hasUpdate && result.latestVersion && enableUpdateDialog) {
-        if (isUpdateVersionSuppressed(result.latestVersion)) {
+        if (await isUpdateVersionSuppressed(result.latestVersion)) {
           return;
         }
         setLatestVersion(result.latestVersion ?? '');
@@ -218,7 +218,7 @@ function App() {
       return;
     }
 
-    suppressUpdateVersion(latestVersion, mode === 'today-version' ? 'today' : 'forever');
+    void suppressUpdateVersion(latestVersion, mode === 'today-version' ? 'today' : 'forever');
   };
 
   if (!isHydrated) {
