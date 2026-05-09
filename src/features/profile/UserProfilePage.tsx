@@ -2,85 +2,59 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@/commands/transport';
 import { useAuthStore } from '@/stores/authStore';
-import { ArrowLeft, User, CreditCard, BarChart3, Coins, TrendingUp, Zap, Package, ChevronLeft, ChevronRight, Search, UserCircle, Activity, Calendar, CheckCircle } from 'lucide-react';
+import { ArrowLeft, User, CreditCard, BarChart3, Coins, TrendingUp, Zap, Package, ChevronLeft, ChevronRight, Search, UserCircle, Activity, Calendar, CheckCircle, MessageSquare, Users, LayoutDashboard } from 'lucide-react';
+import { TicketTab } from './TicketTab';
 
 interface UserProfilePageProps {
   onClose: () => void;
   viewUserId?: string;
 }
 
-type ProfileTab = 'overview' | 'transactions' | 'usage';
+type ProfileTab = 'overview' | 'transactions' | 'usage' | 'tickets';
 
 interface ProfileUser {
-  id: string;
-  username: string;
-  email: string | null;
-  role: string;
-  credits: number;
-  created_at: number;
-  updated_at: number;
+  id: string; username: string; email: string | null; role: string;
+  credits: number; created_at: number; updated_at: number;
 }
 
 interface ProfileStats {
-  txnCount: number;
-  usageCount: number;
-  successCount: number;
-  totalConsumed: number;
-  totalRecharged: number;
-  totalRefunded: number;
-  projectCount: number;
-  successRate: number;
+  txnCount: number; usageCount: number; successCount: number;
+  totalConsumed: number; totalRecharged: number; totalRefunded: number;
+  projectCount: number; successRate: number;
 }
 
-interface TopModel {
-  model: string;
-  provider: string;
-  count: number;
-  total_credits: number;
-}
-
-interface ProviderStat {
-  provider: string;
-  count: number;
-  credits: number;
-}
-
-interface DayStat {
-  day: string;
-  count: number;
-  credits: number;
-}
+interface TopModel { model: string; provider: string; count: number; total_credits: number; }
+interface ProviderStat { provider: string; count: number; credits: number; }
+interface DayStat { day: string; count: number; credits: number; }
 
 interface CreditTxn {
-  id: string;
-  user_id: string;
-  amount: number;
-  balance_before: number;
-  balance_after: number;
-  type: string;
-  note: string | null;
-  reference: string | null;
-  created_at: number;
+  id: string; user_id: string; amount: number; balance_before: number;
+  balance_after: number; type: string; note: string | null; reference: string | null; created_at: number;
 }
 
 interface UsageLog {
-  id: string;
-  user_id: string;
-  provider: string;
-  model: string;
-  credits_used: number;
-  status: string;
-  created_at: number;
+  id: string; user_id: string; provider: string; model: string;
+  credits_used: number; status: string; created_at: number;
 }
 
 interface ProfileData {
-  user: ProfileUser;
-  stats: ProfileStats;
-  topModels: TopModel[];
-  byProvider: ProviderStat[];
-  byDay: DayStat[];
-  recentTxns: CreditTxn[];
-  recentUsage: UsageLog[];
+  user: ProfileUser; stats: ProfileStats;
+  topModels: TopModel[]; byProvider: ProviderStat[]; byDay: DayStat[];
+  recentTxns: CreditTxn[]; recentUsage: UsageLog[];
+}
+
+interface PlatformStats {
+  totalUsers: number; totalAdmins: number;
+  totalCreditsIssued: number; totalCreditsConsumed: number;
+  totalGenerations: number; successGenerations: number;
+  todayUsers: number; todayGenerations: number; todayConsumed: number;
+  topModels: { model: string; count: number; total_credits: number }[];
+  recentUsers: { id: string; username: string; role: string; credits: number; created_at: number }[];
+}
+
+interface PlatformUsageStats {
+  byProvider: { provider: string; count: number; credits: number }[];
+  byDay: { day: string; count: number; credits: number }[];
 }
 
 const txnTypeLabels: Record<string, string> = {
@@ -119,11 +93,7 @@ function StatCard({ label, value, sub, icon: Icon, color }: { label: string; val
 function MiniBarChart({ data, maxBars = 30 }: { data: DayStat[]; maxBars?: number }) {
   const display = data.slice(0, maxBars).reverse();
   const maxCount = Math.max(1, ...display.map(d => d.count));
-
-  if (display.length === 0) {
-    return <div className="text-xs text-text-muted text-center py-6">暂无数据</div>;
-  }
-
+  if (display.length === 0) return <div className="text-xs text-text-muted text-center py-6">暂无数据</div>;
   return (
     <div className="flex items-end gap-px h-32">
       {display.map((d) => {
@@ -152,6 +122,10 @@ export function UserProfilePage({ onClose, viewUserId }: UserProfilePageProps) {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
+  const [platformUsage, setPlatformUsage] = useState<PlatformUsageStats | null>(null);
+  const [platformLoading, setPlatformLoading] = useState(false);
+
   const [txnPage, setTxnPage] = useState(1);
   const [txns, setTxns] = useState<CreditTxn[]>([]);
   const [txnTotal, setTxnTotal] = useState(0);
@@ -166,10 +140,24 @@ export function UserProfilePage({ onClose, viewUserId }: UserProfilePageProps) {
   const [adminSearch, setAdminSearch] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string | undefined>(viewUserId);
 
-  const targetUserId = isAdmin ? (selectedUserId || authUser?.id) : authUser?.id;
+  const isPlatformView = isAdmin && !selectedUserId;
+  const targetUserId = isAdmin ? selectedUserId : authUser?.id;
   const isViewingSelf = targetUserId === authUser?.id;
 
   const pageSize = 20;
+
+  const loadPlatformStats = useCallback(async () => {
+    setPlatformLoading(true);
+    try {
+      const [stats, usage] = await Promise.all([
+        invoke<PlatformStats>('admin_stats'),
+        invoke<PlatformUsageStats>('admin_usage_stats'),
+      ]);
+      setPlatformStats(stats);
+      setPlatformUsage(usage);
+    } catch (e) { console.error(e); }
+    setPlatformLoading(false);
+  }, []);
 
   const loadProfile = useCallback(async () => {
     if (!targetUserId) return;
@@ -184,34 +172,45 @@ export function UserProfilePage({ onClose, viewUserId }: UserProfilePageProps) {
   }, [targetUserId, isViewingSelf]);
 
   const loadTxns = useCallback(async () => {
-    if (!isViewingSelf) {
-      setTxns(profile?.recentTxns || []);
-      setTxnTotal(profile?.recentTxns?.length || 0);
-      return;
-    }
+    if (!targetUserId) return;
     setTxnLoading(true);
     try {
-      const result = await invoke<{ rows: CreditTxn[]; total: number }>('credit_transactions', { page: txnPage, pageSize });
-      setTxns(result.rows);
-      setTxnTotal(result.total);
+      if (isViewingSelf) {
+        const result = await invoke<{ rows: CreditTxn[]; total: number }>('credit_transactions', { page: txnPage, pageSize });
+        setTxns(result.rows);
+        setTxnTotal(result.total);
+      } else {
+        const result = await invoke<{ rows: any[]; total: number }>('admin_ai_usage', {
+          page: txnPage, pageSize, userId: targetUserId,
+        });
+        setTxns(result.rows.map((r) => ({
+          id: r.id, user_id: r.user_id, amount: r.credits_used, balance_before: 0,
+          balance_after: 0, type: r.status, note: `${r.provider}/${r.model}`, reference: null, created_at: r.created_at,
+        })));
+        setTxnTotal(result.total);
+      }
     } catch (e) { console.error(e); }
     setTxnLoading(false);
-  }, [txnPage, isViewingSelf, profile]);
+  }, [txnPage, targetUserId, isViewingSelf]);
 
   const loadUsage = useCallback(async () => {
-    if (!isViewingSelf) {
-      setUsage(profile?.recentUsage || []);
-      setUsageTotal(profile?.recentUsage?.length || 0);
-      return;
-    }
+    if (!targetUserId) return;
     setUsageLoading(true);
     try {
-      const result = await invoke<{ rows: UsageLog[]; total: number }>('user_usage_log', { page: usagePage, pageSize });
-      setUsage(result.rows);
-      setUsageTotal(result.total);
+      if (isViewingSelf) {
+        const result = await invoke<{ rows: UsageLog[]; total: number }>('user_usage_log', { page: usagePage, pageSize });
+        setUsage(result.rows);
+        setUsageTotal(result.total);
+      } else {
+        const result = await invoke<{ rows: UsageLog[]; total: number }>('admin_ai_usage', {
+          page: usagePage, pageSize, userId: targetUserId,
+        });
+        setUsage(result.rows);
+        setUsageTotal(result.total);
+      }
     } catch (e) { console.error(e); }
     setUsageLoading(false);
-  }, [usagePage, isViewingSelf, profile]);
+  }, [usagePage, targetUserId, isViewingSelf]);
 
   const loadAdminUsers = useCallback(async () => {
     if (!isAdmin) return;
@@ -222,37 +221,59 @@ export function UserProfilePage({ onClose, viewUserId }: UserProfilePageProps) {
   }, [isAdmin, adminSearch]);
 
   useEffect(() => {
-    void loadProfile();
-    if (isAdmin && !viewUserId) void loadAdminUsers();
-  }, [loadProfile, loadAdminUsers, isAdmin, viewUserId]);
+    if (isPlatformView) {
+      void loadPlatformStats();
+    } else {
+      void loadProfile();
+    }
+    if (isAdmin) void loadAdminUsers();
+  }, [isPlatformView, loadPlatformStats, loadProfile, loadAdminUsers, isAdmin]);
 
   useEffect(() => {
-    if (tab === 'transactions') void loadTxns();
-  }, [tab, loadTxns]);
+    if (!isPlatformView && tab === 'transactions') void loadTxns();
+  }, [tab, loadTxns, isPlatformView]);
 
   useEffect(() => {
-    if (tab === 'usage') void loadUsage();
-  }, [tab, loadUsage]);
+    if (!isPlatformView && tab === 'usage') void loadUsage();
+  }, [tab, loadUsage, isPlatformView]);
 
   useEffect(() => {
     setTxnPage(1);
     setUsagePage(1);
     setTab('overview');
-    void loadProfile();
+    setProfile(null);
+    setPlatformStats(null);
+    if (isPlatformView) {
+      void loadPlatformStats();
+    } else if (targetUserId) {
+      void loadProfile();
+    }
   }, [selectedUserId]);
 
-  const tabs = [
-    { key: 'overview' as ProfileTab, label: t('profile.overview'), icon: Activity },
-    { key: 'transactions' as ProfileTab, label: t('profile.transactions'), icon: CreditCard },
-    { key: 'usage' as ProfileTab, label: t('profile.usage'), icon: BarChart3 },
-  ];
+  const tabs = isPlatformView
+    ? [
+        { key: 'overview' as ProfileTab, label: t('profile.platformOverview'), icon: LayoutDashboard },
+        { key: 'tickets' as ProfileTab, label: t('profile.tickets'), icon: MessageSquare },
+      ]
+    : [
+        { key: 'overview' as ProfileTab, label: t('profile.overview'), icon: Activity },
+        { key: 'transactions' as ProfileTab, label: t('profile.transactions'), icon: CreditCard },
+        { key: 'usage' as ProfileTab, label: t('profile.usage'), icon: BarChart3 },
+        { key: 'tickets' as ProfileTab, label: t('profile.tickets'), icon: MessageSquare },
+      ];
 
   const txnTotalPages = Math.max(1, Math.ceil(txnTotal / pageSize));
   const usageTotalPages = Math.max(1, Math.ceil(usageTotal / pageSize));
 
+  const headerTitle = isPlatformView
+    ? t('profile.platformStats')
+    : profile?.user
+      ? `${profile.user.username} ${t('profile.profile')}`
+      : t('profile.profile');
+
   return (
     <div className="absolute inset-0 flex bg-bg-dark">
-      {isAdmin && !viewUserId && (
+      {isAdmin && (
         <div className="w-[200px] shrink-0 bg-bg-dark border-r border-border-dark flex flex-col">
           <div className="px-3 py-3 border-b border-border-dark">
             <span className="text-xs font-medium text-text-muted uppercase tracking-wider">{t('profile.userList')}</span>
@@ -270,12 +291,12 @@ export function UserProfilePage({ onClose, viewUserId }: UserProfilePageProps) {
             <button
               onClick={() => setSelectedUserId(undefined)}
               className={`w-full text-left px-3 py-2 text-xs border-b border-border-dark/30 transition-colors ${
-                !selectedUserId ? 'bg-accent/10 text-text-dark' : 'text-text-muted hover:bg-surface-dark'
+                isPlatformView ? 'bg-accent/10 text-text-dark' : 'text-text-muted hover:bg-surface-dark'
               }`}
             >
               <div className="flex items-center gap-2">
-                <UserCircle className="w-3.5 h-3.5" />
-                <span className="font-medium">{t('profile.myProfile')}</span>
+                <LayoutDashboard className="w-3.5 h-3.5" />
+                <span className="font-medium">{t('profile.platformStats')}</span>
               </div>
             </button>
             {adminUsers.map((u) => (
@@ -302,11 +323,13 @@ export function UserProfilePage({ onClose, viewUserId }: UserProfilePageProps) {
           <button onClick={onClose} className="p-1.5 hover:bg-bg-dark rounded transition-colors" title={t('titleBar.back')}>
             <ArrowLeft className="w-4 h-4 text-text-muted" />
           </button>
-          <UserCircle className="w-5 h-5 text-accent" />
-          <h2 className="text-lg font-semibold text-text-dark">
-            {isViewingSelf ? t('profile.myProfile') : `${profile?.user?.username || ''} ${t('profile.profile')}`}
-          </h2>
-          {!isViewingSelf && profile?.user && (
+          {isPlatformView ? (
+            <LayoutDashboard className="w-5 h-5 text-accent" />
+          ) : (
+            <UserCircle className="w-5 h-5 text-accent" />
+          )}
+          <h2 className="text-lg font-semibold text-text-dark">{headerTitle}</h2>
+          {!isPlatformView && profile?.user && (
             <span className="px-2 py-0.5 rounded text-[10px] bg-accent/10 text-accent">{profile.user.role}</span>
           )}
           <div className="flex-1" />
@@ -327,36 +350,39 @@ export function UserProfilePage({ onClose, viewUserId }: UserProfilePageProps) {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {loading ? (
+          {isPlatformView ? (
+            <>
+              {tab === 'overview' && (
+                platformLoading ? (
+                  <div className="flex items-center justify-center h-full text-text-muted">{t('common.loading')}</div>
+                ) : platformStats ? (
+                  <PlatformOverviewTab stats={platformStats} usage={platformUsage} isZh={isZh} />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-text-muted">{t('common.error')}</div>
+                )
+              )}
+              {tab === 'tickets' && <TicketTab allTickets />}
+            </>
+          ) : loading ? (
             <div className="flex items-center justify-center h-full text-text-muted">{t('common.loading')}</div>
           ) : !profile ? (
             <div className="flex items-center justify-center h-full text-text-muted">{t('common.error')}</div>
           ) : (
             <>
-              {tab === 'overview' && <OverviewTab profile={profile} isZh={isZh} />}
+              {tab === 'overview' && <UserOverviewTab profile={profile} isZh={isZh} />}
               {tab === 'transactions' && (
                 <TransactionsTab
-                  txns={txns}
-                  total={txnTotal}
-                  page={txnPage}
-                  totalPages={txnTotalPages}
-                  loading={txnLoading}
-                  onPageChange={setTxnPage}
-                  txnLabels={txnLabels}
-                  canPaginate={isViewingSelf}
+                  txns={txns} total={txnTotal} page={txnPage} totalPages={txnTotalPages}
+                  loading={txnLoading} onPageChange={setTxnPage} txnLabels={txnLabels} canPaginate={isViewingSelf}
                 />
               )}
               {tab === 'usage' && (
                 <UsageTab
-                  usage={usage}
-                  total={usageTotal}
-                  page={usagePage}
-                  totalPages={usageTotalPages}
-                  loading={usageLoading}
-                  onPageChange={setUsagePage}
-                  canPaginate={isViewingSelf}
+                  usage={usage} total={usageTotal} page={usagePage} totalPages={usageTotalPages}
+                  loading={usageLoading} onPageChange={setUsagePage} canPaginate={isViewingSelf}
                 />
               )}
+              {tab === 'tickets' && <TicketTab viewUserId={targetUserId} />}
             </>
           )}
         </div>
@@ -365,7 +391,79 @@ export function UserProfilePage({ onClose, viewUserId }: UserProfilePageProps) {
   );
 }
 
-function OverviewTab({ profile, isZh }: { profile: ProfileData; isZh: boolean }) {
+function PlatformOverviewTab({ stats, usage, isZh }: { stats: PlatformStats; usage: PlatformUsageStats | null; isZh: boolean }) {
+  const { t } = useTranslation();
+  const successRate = stats.totalGenerations > 0 ? Math.round(stats.successGenerations / stats.totalGenerations * 100) : 0;
+
+  return (
+    <div className="p-6 space-y-5 max-w-5xl mx-auto">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard label={t('admin.totalUsers')} value={stats.totalUsers} icon={Users} color="text-blue-400" />
+        <StatCard label={t('admin.totalGenerations')} value={stats.totalGenerations} sub={`${t('admin.successRate')} ${successRate}%`} icon={Zap} color="text-amber-400" />
+        <StatCard label={t('admin.totalCreditsIssued')} value={stats.totalCreditsIssued.toLocaleString()} icon={Coins} color="text-emerald-400" />
+        <StatCard label={t('admin.totalCreditsConsumed')} value={stats.totalCreditsConsumed.toLocaleString()} icon={TrendingUp} color="text-red-400" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="rounded-lg border border-border-dark bg-bg-dark p-5">
+          <h3 className="text-sm font-medium text-text-dark mb-3">{t('admin.todayStats')}</h3>
+          <div className="grid grid-cols-3 gap-4">
+            <div><div className="text-2xl font-bold text-text-dark">{stats.todayUsers}</div><div className="text-xs text-text-muted">{t('admin.activeUsers')}</div></div>
+            <div><div className="text-2xl font-bold text-text-dark">{stats.todayGenerations}</div><div className="text-xs text-text-muted">{t('admin.todayGenerations')}</div></div>
+            <div><div className="text-2xl font-bold text-accent">{stats.todayConsumed}</div><div className="text-xs text-text-muted">{t('admin.todayConsumed')}</div></div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border-dark bg-bg-dark p-5">
+          <h3 className="text-sm font-medium text-text-dark mb-3">{t('admin.topModels')}</h3>
+          <div className="space-y-2.5">
+            {stats.topModels.slice(0, 5).map((m, i) => (
+              <div key={m.model} className="flex items-center gap-3 text-xs">
+                <span className="w-5 text-right text-text-muted font-mono">{i + 1}</span>
+                <span className="text-text-dark font-mono truncate flex-1">{m.model}</span>
+                <span className="text-text-muted">{m.count}{isZh ? '次' : 'x'}</span>
+                <span className="text-accent font-mono">{m.total_credits}</span>
+              </div>
+            ))}
+            {stats.topModels.length === 0 && <div className="text-xs text-text-muted">{t('profile.noData')}</div>}
+          </div>
+        </div>
+      </div>
+
+      {usage && usage.byProvider.length > 0 && (
+        <div className="rounded-lg border border-border-dark bg-bg-dark p-5">
+          <h3 className="text-sm font-medium text-text-dark mb-3">{t('admin.byProvider')}</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {usage.byProvider.map((p) => (
+              <div key={p.provider} className="rounded border border-border-dark bg-surface-dark p-3">
+                <div className="text-sm font-medium text-text-dark">{p.provider}</div>
+                <div className="text-xs text-text-muted mt-1">{p.count}{isZh ? '次' : 'x'} / {p.credits}{isZh ? '积分' : ' credits'}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-border-dark bg-bg-dark p-5">
+        <h3 className="text-sm font-medium text-text-dark mb-3">{t('admin.recentUsers')}</h3>
+        <div className="space-y-2">
+          {stats.recentUsers.map((u) => (
+            <div key={u.id} className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <User className="w-3.5 h-3.5 text-text-muted" />
+                <span className="text-text-dark">{u.username}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] ${u.role === 'admin' ? 'bg-accent/10 text-accent' : 'bg-bg-dark text-text-muted'}`}>{u.role}</span>
+              </div>
+              <span className="text-text-muted">{fmtDate(u.created_at)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UserOverviewTab({ profile, isZh }: { profile: ProfileData; isZh: boolean }) {
   const { t } = useTranslation();
   const { user, stats, topModels, byProvider, byDay } = profile;
 
@@ -379,9 +477,7 @@ function OverviewTab({ profile, isZh }: { profile: ProfileData; isZh: boolean })
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xl font-semibold text-text-dark">{user.username}</span>
-              <span className={`px-2 py-0.5 rounded text-[11px] ${user.role === 'admin' ? 'bg-accent/10 text-accent' : 'bg-bg-dark text-text-muted'}`}>
-                {user.role}
-              </span>
+              <span className={`px-2 py-0.5 rounded text-[11px] ${user.role === 'admin' ? 'bg-accent/10 text-accent' : 'bg-bg-dark text-text-muted'}`}>{user.role}</span>
             </div>
             {user.email && <div className="text-sm text-text-muted mt-0.5">{user.email}</div>}
             <div className="text-xs text-text-muted mt-1.5 flex items-center gap-1">
@@ -468,7 +564,6 @@ function TransactionsTab({ txns, total, page, totalPages, loading, onPageChange,
   onPageChange: (p: number) => void; txnLabels: Record<string, string>; canPaginate: boolean;
 }) {
   const { t } = useTranslation();
-
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
@@ -476,30 +571,24 @@ function TransactionsTab({ txns, total, page, totalPages, loading, onPageChange,
           <div className="flex items-center justify-center py-20 text-text-muted">{t('common.loading')}</div>
         ) : (
           <table className="w-full text-xs">
-            <thead>
-              <tr className="text-left text-text-muted bg-bg-dark sticky top-0">
-                <th className="px-5 py-3">{t('admin.time')}</th>
-                <th className="px-5 py-3">{t('admin.type')}</th>
-                <th className="px-5 py-3 text-right">{t('admin.amount')}</th>
-                <th className="px-5 py-3 text-right">{t('admin.balance')}</th>
-                <th className="px-5 py-3">{t('admin.note')}</th>
-              </tr>
-            </thead>
+            <thead><tr className="text-left text-text-muted bg-bg-dark sticky top-0">
+              <th className="px-5 py-3">{t('admin.time')}</th>
+              <th className="px-5 py-3">{t('admin.type')}</th>
+              <th className="px-5 py-3 text-right">{t('admin.amount')}</th>
+              <th className="px-5 py-3 text-right">{t('admin.balance')}</th>
+              <th className="px-5 py-3">{t('admin.note')}</th>
+            </tr></thead>
             <tbody>
               {txns.map((txn) => (
                 <tr key={txn.id} className="border-t border-border-dark/50 hover:bg-bg-dark/50">
                   <td className="px-5 py-2.5 text-text-muted">{fmtDate(txn.created_at)}</td>
                   <td className={`px-5 py-2.5 ${txnTypeColors[txn.type] || 'text-text-muted'}`}>{txnLabels[txn.type] || txn.type}</td>
-                  <td className={`px-5 py-2.5 text-right font-mono ${txn.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {txn.amount >= 0 ? '+' : ''}{txn.amount}
-                  </td>
+                  <td className={`px-5 py-2.5 text-right font-mono ${txn.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{txn.amount >= 0 ? '+' : ''}{txn.amount}</td>
                   <td className="px-5 py-2.5 text-right font-mono text-text-muted">{txn.balance_after}</td>
                   <td className="px-5 py-2.5 text-text-muted truncate max-w-[240px]">{txn.note || '-'}</td>
                 </tr>
               ))}
-              {txns.length === 0 && (
-                <tr><td colSpan={5} className="px-5 py-12 text-center text-text-muted">{t('profile.noData')}</td></tr>
-              )}
+              {txns.length === 0 && <tr><td colSpan={5} className="px-5 py-12 text-center text-text-muted">{t('profile.noData')}</td></tr>}
             </tbody>
           </table>
         )}
@@ -508,14 +597,8 @@ function TransactionsTab({ txns, total, page, totalPages, loading, onPageChange,
         <div className="shrink-0 px-6 py-3 border-t border-border-dark flex items-center justify-between bg-surface-dark">
           <span className="text-xs text-text-muted">{t('admin.pageInfo', { current: page, total: totalPages, count: total })}</span>
           <div className="flex items-center gap-1">
-            <button onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1}
-              className="h-7 w-7 flex items-center justify-center rounded border border-border-dark text-text-muted hover:bg-bg-dark disabled:opacity-30">
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
-              className="h-7 w-7 flex items-center justify-center rounded border border-border-dark text-text-muted hover:bg-bg-dark disabled:opacity-30">
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
+            <button onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1} className="h-7 w-7 flex items-center justify-center rounded border border-border-dark text-text-muted hover:bg-bg-dark disabled:opacity-30"><ChevronLeft className="w-3.5 h-3.5" /></button>
+            <button onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page >= totalPages} className="h-7 w-7 flex items-center justify-center rounded border border-border-dark text-text-muted hover:bg-bg-dark disabled:opacity-30"><ChevronRight className="w-3.5 h-3.5" /></button>
           </div>
         </div>
       )}
@@ -528,7 +611,6 @@ function UsageTab({ usage, total, page, totalPages, loading, onPageChange, canPa
   onPageChange: (p: number) => void; canPaginate: boolean;
 }) {
   const { t } = useTranslation();
-
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
@@ -536,15 +618,13 @@ function UsageTab({ usage, total, page, totalPages, loading, onPageChange, canPa
           <div className="flex items-center justify-center py-20 text-text-muted">{t('common.loading')}</div>
         ) : (
           <table className="w-full text-xs">
-            <thead>
-              <tr className="text-left text-text-muted bg-bg-dark sticky top-0">
-                <th className="px-5 py-3">{t('admin.time')}</th>
-                <th className="px-5 py-3">Provider</th>
-                <th className="px-5 py-3">Model</th>
-                <th className="px-5 py-3 text-right">{t('admin.creditsUsed')}</th>
-                <th className="px-5 py-3">Status</th>
-              </tr>
-            </thead>
+            <thead><tr className="text-left text-text-muted bg-bg-dark sticky top-0">
+              <th className="px-5 py-3">{t('admin.time')}</th>
+              <th className="px-5 py-3">Provider</th>
+              <th className="px-5 py-3">Model</th>
+              <th className="px-5 py-3 text-right">{t('admin.creditsUsed')}</th>
+              <th className="px-5 py-3">Status</th>
+            </tr></thead>
             <tbody>
               {usage.map((u) => (
                 <tr key={u.id} className="border-t border-border-dark/50 hover:bg-bg-dark/50">
@@ -552,14 +632,10 @@ function UsageTab({ usage, total, page, totalPages, loading, onPageChange, canPa
                   <td className="px-5 py-2.5 text-text-muted">{u.provider}</td>
                   <td className="px-5 py-2.5 text-text-muted font-mono">{u.model}</td>
                   <td className="px-5 py-2.5 text-right font-mono text-accent">{u.credits_used}</td>
-                  <td className="px-5 py-2.5">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${u.status === 'succeeded' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>{u.status}</span>
-                  </td>
+                  <td className="px-5 py-2.5"><span className={`px-1.5 py-0.5 rounded text-[10px] ${u.status === 'succeeded' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>{u.status}</span></td>
                 </tr>
               ))}
-              {usage.length === 0 && (
-                <tr><td colSpan={5} className="px-5 py-12 text-center text-text-muted">{t('profile.noData')}</td></tr>
-              )}
+              {usage.length === 0 && <tr><td colSpan={5} className="px-5 py-12 text-center text-text-muted">{t('profile.noData')}</td></tr>}
             </tbody>
           </table>
         )}
@@ -568,14 +644,8 @@ function UsageTab({ usage, total, page, totalPages, loading, onPageChange, canPa
         <div className="shrink-0 px-6 py-3 border-t border-border-dark flex items-center justify-between bg-surface-dark">
           <span className="text-xs text-text-muted">{t('admin.pageInfo', { current: page, total: totalPages, count: total })}</span>
           <div className="flex items-center gap-1">
-            <button onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1}
-              className="h-7 w-7 flex items-center justify-center rounded border border-border-dark text-text-muted hover:bg-bg-dark disabled:opacity-30">
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
-              className="h-7 w-7 flex items-center justify-center rounded border border-border-dark text-text-muted hover:bg-bg-dark disabled:opacity-30">
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
+            <button onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1} className="h-7 w-7 flex items-center justify-center rounded border border-border-dark text-text-muted hover:bg-bg-dark disabled:opacity-30"><ChevronLeft className="w-3.5 h-3.5" /></button>
+            <button onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page >= totalPages} className="h-7 w-7 flex items-center justify-center rounded border border-border-dark text-text-muted hover:bg-bg-dark disabled:opacity-30"><ChevronRight className="w-3.5 h-3.5" /></button>
           </div>
         </div>
       )}

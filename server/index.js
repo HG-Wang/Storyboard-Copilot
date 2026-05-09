@@ -103,6 +103,38 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS tickets (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    title TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'general',
+    priority TEXT NOT NULL DEFAULT 'medium',
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_tickets_user ON tickets(user_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status, updated_at DESC);
+
+  CREATE TABLE IF NOT EXISTS ticket_messages (
+    id TEXT PRIMARY KEY,
+    ticket_id TEXT NOT NULL REFERENCES tickets(id),
+    user_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    is_staff INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_ticket_msg ON ticket_messages(ticket_id, created_at ASC);
+
+  CREATE TABLE IF NOT EXISTS text_model_pricing (
+    model_id TEXT PRIMARY KEY,
+    provider_id TEXT NOT NULL,
+    display_name TEXT,
+    credits_per_request INTEGER NOT NULL DEFAULT 1,
+    max_tokens INTEGER NOT NULL DEFAULT 4096,
+    created_at INTEGER NOT NULL
+  );
 `);
 
 // Migration: add user_id column to projects if missing
@@ -141,6 +173,21 @@ if (pricingCount.count === 0) {
   const stmt = db.prepare('INSERT INTO model_pricing (model_id, provider_id, display_name, credits_per_image, created_at) VALUES (?, ?, ?, ?, ?)');
   for (const p of defaultPricing) {
     stmt.run(p.model, p.provider, p.name, p.credits, nowMs());
+  }
+}
+
+// Seed default text model pricing if empty
+const textPricingCount = db.prepare('SELECT COUNT(*) as count FROM text_model_pricing').get();
+if (textPricingCount.count === 0) {
+  const defaultTextPricing = [
+    { model: 'openai/gpt-4o', provider: 'openai', name: 'GPT-4o', credits: 3, maxTokens: 4096 },
+    { model: 'openai/gpt-4o-mini', provider: 'openai', name: 'GPT-4o Mini', credits: 1, maxTokens: 4096 },
+    { model: 'anthropic/claude-sonnet-4-20250514', provider: 'anthropic', name: 'Claude Sonnet 4', credits: 3, maxTokens: 4096 },
+    { model: 'anthropic/claude-haiku-3.5', provider: 'anthropic', name: 'Claude Haiku 3.5', credits: 1, maxTokens: 4096 },
+  ];
+  const tStmt = db.prepare('INSERT INTO text_model_pricing (model_id, provider_id, display_name, credits_per_request, max_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+  for (const p of defaultTextPricing) {
+    tStmt.run(p.model, p.provider, p.name, p.credits, p.maxTokens, nowMs());
   }
 }
 
@@ -446,6 +493,30 @@ handleCommand('admin_delete_pricing', async ({ model_id }) => {
   return { ok: true };
 }, { auth: true, admin: true });
 
+// ==================== ADMIN: TEXT MODEL PRICING ====================
+
+handleCommand('admin_list_text_pricing', async () => {
+  return db.prepare('SELECT * FROM text_model_pricing ORDER BY provider_id, model_id').all();
+}, { auth: true, admin: true });
+
+handleCommand('admin_save_text_pricing', async ({ model_id, provider_id, display_name, credits_per_request, max_tokens }) => {
+  if (!model_id || !provider_id) throw new Error('Model ID 和 Provider ID 不能为空');
+  const ts = nowMs();
+  db.prepare(`
+    INSERT INTO text_model_pricing (model_id, provider_id, display_name, credits_per_request, max_tokens, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(model_id) DO UPDATE SET
+      provider_id = excluded.provider_id, display_name = excluded.display_name,
+      credits_per_request = excluded.credits_per_request, max_tokens = excluded.max_tokens
+  `).run(model_id, provider_id, display_name || model_id, Math.max(1, credits_per_request || 1), max_tokens || 4096, ts);
+  return { ok: true };
+}, { auth: true, admin: true });
+
+handleCommand('admin_delete_text_pricing', async ({ model_id }) => {
+  db.prepare('DELETE FROM text_model_pricing WHERE model_id = ?').run(model_id);
+  return { ok: true };
+}, { auth: true, admin: true });
+
 // ==================== ADMIN: DASHBOARD & STATS ====================
 
 handleCommand('admin_stats', async () => {
@@ -585,12 +656,231 @@ handleCommand('user_usage_log', async ({ page, pageSize }, user) => {
   return { rows, total, page: p, pageSize: ps };
 }, { auth: true });
 
+// ==================== TICKET ENDPOINTS ====================
+
+handleCommand('create_ticket', async ({ title, category, priority, content }, user) => {
+  if (!title?.trim()) throw new Error('标题不能为空');
+  if (!content?.trim()) throw new Error('内容不能为空');
+  const id = uuidv4();
+  const ts = nowMs();
+  db.prepare(`INSERT INTO tickets (id, user_id, title, category, priority, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)`)
+    .run(id, user.id, title.trim(), category || 'general', priority || 'medium', ts, ts);
+  db.prepare(`INSERT INTO ticket_messages (id, ticket_id, user_id, content, is_staff, created_at) VALUES (?, ?, ?, ?, 0, ?)`)
+    .run(uuidv4(), id, user.id, content.trim(), ts);
+  return { id };
+}, { auth: true });
+
+handleCommand('list_my_tickets', async ({ page, pageSize, status }, user) => {
+  const p = Math.max(1, page || 1);
+  const ps = Math.min(50, Math.max(1, pageSize || 20));
+  const offset = (p - 1) * ps;
+  let where = 'user_id = ?';
+  const params = [user.id];
+  if (status) { where += ' AND status = ?'; params.push(status); }
+  const total = db.prepare(`SELECT COUNT(*) as c FROM tickets WHERE ${where}`).get(...params).c;
+  const rows = db.prepare(`SELECT * FROM tickets WHERE ${where} ORDER BY updated_at DESC LIMIT ? OFFSET ?`).all(...params, ps, offset);
+  const tickets = rows.map(t => {
+    const msgCount = db.prepare('SELECT COUNT(*) as c FROM ticket_messages WHERE ticket_id = ?').get(t.id).c;
+    const lastMsg = db.prepare('SELECT content, created_at FROM ticket_messages WHERE ticket_id = ? ORDER BY created_at DESC LIMIT 1').get(t.id);
+    const unread = db.prepare("SELECT COUNT(*) as c FROM ticket_messages WHERE ticket_id = ? AND is_staff = 1 AND created_at > (SELECT COALESCE(MAX(created_at),0) FROM ticket_messages WHERE ticket_id = ? AND user_id = ? AND is_staff = 0)").get(t.id, t.id, user.id).c;
+    return { ...t, messageCount: msgCount, lastMessage: lastMsg?.content || null, lastMessageAt: lastMsg?.created_at || null, unreadStaff: unread };
+  });
+  return { rows: tickets, total, page: p, pageSize: ps };
+}, { auth: true });
+
+handleCommand('get_ticket', async ({ ticketId }, user) => {
+  const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
+  if (!ticket) throw new Error('工单不存在');
+  if (ticket.user_id !== user.id && user.role !== 'admin') throw new Error('无权访问');
+  const messages = db.prepare('SELECT tm.*, u.username FROM ticket_messages tm LEFT JOIN users u ON tm.user_id = u.id WHERE tm.ticket_id = ? ORDER BY tm.created_at ASC').all(ticketId);
+  const ticketUser = db.prepare('SELECT username FROM users WHERE id = ?').get(ticket.user_id);
+  return { ...ticket, username: ticketUser?.username || 'unknown', messages };
+}, { auth: true });
+
+handleCommand('reply_ticket', async ({ ticketId, content }, user) => {
+  if (!content?.trim()) throw new Error('回复内容不能为空');
+  const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
+  if (!ticket) throw new Error('工单不存在');
+  if (ticket.user_id !== user.id && user.role !== 'admin') throw new Error('无权操作');
+  if (ticket.status === 'closed') throw new Error('工单已关闭，无法回复');
+  const ts = nowMs();
+  const isStaff = user.role === 'admin' ? 1 : 0;
+  db.prepare(`INSERT INTO ticket_messages (id, ticket_id, user_id, content, is_staff, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+    .run(uuidv4(), ticketId, user.id, content.trim(), isStaff, ts);
+  db.prepare('UPDATE tickets SET updated_at = ? WHERE id = ?').run(ts, ticketId);
+  return { ok: true };
+}, { auth: true });
+
+handleCommand('close_ticket', async ({ ticketId }, user) => {
+  const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
+  if (!ticket) throw new Error('工单不存在');
+  if (ticket.user_id !== user.id && user.role !== 'admin') throw new Error('无权操作');
+  db.prepare("UPDATE tickets SET status = 'closed', updated_at = ? WHERE id = ?").run(nowMs(), ticketId);
+  return { ok: true };
+}, { auth: true });
+
+handleCommand('reopen_ticket', async ({ ticketId }, user) => {
+  const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
+  if (!ticket) throw new Error('工单不存在');
+  if (ticket.user_id !== user.id) throw new Error('无权操作');
+  if (ticket.status !== 'closed') throw new Error('工单未关闭');
+  db.prepare("UPDATE tickets SET status = 'open', updated_at = ? WHERE id = ?").run(nowMs(), ticketId);
+  return { ok: true };
+}, { auth: true });
+
+handleCommand('admin_list_tickets', async ({ page, pageSize, status, search }) => {
+  const p = Math.max(1, page || 1);
+  const ps = Math.min(100, Math.max(1, pageSize || 20));
+  const offset = (p - 1) * ps;
+  let where = '1=1';
+  const params = [];
+  if (status) { where += ' AND t.status = ?'; params.push(status); }
+  if (search) { where += ' AND (t.title LIKE ? OR u.username LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
+  const total = db.prepare(`SELECT COUNT(*) as c FROM tickets t LEFT JOIN users u ON t.user_id = u.id WHERE ${where}`).get(...params).c;
+  const rows = db.prepare(`
+    SELECT t.*, u.username FROM tickets t LEFT JOIN users u ON t.user_id = u.id
+    WHERE ${where} ORDER BY t.updated_at DESC LIMIT ? OFFSET ?
+  `).all(...params, ps, offset);
+  const tickets = rows.map(t => {
+    const msgCount = db.prepare('SELECT COUNT(*) as c FROM ticket_messages WHERE ticket_id = ?').get(t.id).c;
+    return { ...t, messageCount: msgCount };
+  });
+  return { rows: tickets, total, page: p, pageSize: ps };
+}, { auth: true, admin: true });
+
+handleCommand('admin_update_ticket', async ({ ticketId, status, priority }) => {
+  const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(ticketId);
+  if (!ticket) throw new Error('工单不存在');
+  const ts = nowMs();
+  if (status) db.prepare('UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?').run(status, ts, ticketId);
+  if (priority) db.prepare('UPDATE tickets SET priority = ?, updated_at = ? WHERE id = ?').run(priority, ts, ticketId);
+  return { ok: true };
+}, { auth: true, admin: true });
+
 // ==================== PUBLIC: MODEL LIST & PRICING ====================
 
 handleCommand('list_models', async () => {
   const rows = db.prepare('SELECT model_id, provider_id, display_name, credits_per_image FROM model_pricing ORDER BY provider_id, model_id').all();
   return rows;
 });
+
+handleCommand('list_text_models', async () => {
+  const rows = db.prepare('SELECT model_id, provider_id, display_name, credits_per_request, max_tokens FROM text_model_pricing ORDER BY provider_id, model_id').all();
+  return rows;
+});
+
+// ==================== TEXT GENERATION ====================
+
+function deductTextCredits(userId, model) {
+  const pricing = db.prepare('SELECT credits_per_request FROM text_model_pricing WHERE model_id = ?').get(model);
+  const cost = pricing?.credits_per_request ?? 1;
+  const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId);
+  if (!user || user.credits < cost) {
+    throw new Error(`积分不足，需要 ${cost} 积分，当前余额 ${user?.credits ?? 0}`);
+  }
+  const before = user.credits;
+  const after = before - cost;
+  const ts = nowMs();
+  db.prepare('UPDATE users SET credits = ?, updated_at = ? WHERE id = ?').run(after, ts, userId);
+  db.prepare(`
+    INSERT INTO credit_transactions (id, user_id, amount, balance_before, balance_after, type, reference, note, created_at)
+    VALUES (?, ?, ?, ?, ?, 'consume', ?, ?, ?)
+  `).run(uuidv4(), userId, -cost, before, after, model, `AI文本生成: ${model}`, ts);
+  return cost;
+}
+
+function resolveTextProviderFromModel(model) {
+  const pricing = db.prepare('SELECT provider_id FROM text_model_pricing WHERE model_id = ?').get(model);
+  if (pricing) return pricing.provider_id;
+  if (model.startsWith('openai')) return 'openai';
+  if (model.startsWith('anthropic')) return 'anthropic';
+  if (model.startsWith('google')) return 'google';
+  return null;
+}
+
+function getTextProviderEndpoint(provider, baseUrl) {
+  if (baseUrl) return baseUrl;
+  const endpoints = {
+    openai: 'https://api.openai.com/v1/chat/completions',
+    anthropic: 'https://api.anthropic.com/v1/messages',
+    google: 'https://generativelanguage.googleapis.com/v1beta/chat/completions',
+  };
+  return endpoints[provider] || '';
+}
+
+async function generateTextDirect(request) {
+  const { prompt, model, system_prompt, max_tokens, temperature } = request || {};
+  const provider = resolveTextProviderFromModel(model);
+  if (!provider) throw new Error(`未知的文本模型供应商: ${model}`);
+
+  const providerConfig = await getProviderApiKey(provider);
+  if (!providerConfig) throw new Error(`供应商 ${provider} 未配置 API Key，请联系管理员`);
+
+  const textPricing = db.prepare('SELECT max_tokens FROM text_model_pricing WHERE model_id = ?').get(model);
+  const effectiveMaxTokens = max_tokens || textPricing?.max_tokens || 4096;
+
+  const endpoint = getTextProviderEndpoint(provider, providerConfig.base_url);
+
+  const isAnthropic = provider === 'anthropic';
+  const headers = { 'Content-Type': 'application/json' };
+  const body = isAnthropic
+    ? {
+        model,
+        max_tokens: effectiveMaxTokens,
+        ...(system_prompt ? { system: system_prompt } : {}),
+        messages: [{ role: 'user', content: prompt }],
+        ...(temperature != null ? { temperature } : {}),
+      }
+    : {
+        model,
+        max_tokens: effectiveMaxTokens,
+        messages: [
+          ...(system_prompt ? [{ role: 'system', content: system_prompt }] : []),
+          { role: 'user', content: prompt },
+        ],
+        ...(temperature != null ? { temperature } : {}),
+      };
+
+  if (isAnthropic) {
+    headers['x-api-key'] = providerConfig.api_key;
+    headers['anthropic-version'] = '2023-06-01';
+  } else {
+    headers['Authorization'] = `Bearer ${providerConfig.api_key}`;
+  }
+
+  const response = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`供应商错误: ${errorText}`);
+  }
+
+  const result = await response.json();
+
+  if (isAnthropic) {
+    return result.content?.[0]?.text || '';
+  }
+  return result.choices?.[0]?.message?.content || '';
+}
+
+handleCommand('generate_text', async ({ request }, user) => {
+  const provider = resolveTextProviderFromModel(request.model);
+  const cost = deductTextCredits(user.id, request.model);
+  try {
+    const result = await generateTextDirect(request);
+    logAiUsage(user.id, provider || 'unknown', request.model, cost, 'succeeded');
+    return result;
+  } catch (error) {
+    const ts = nowMs();
+    const current = db.prepare('SELECT credits FROM users WHERE id = ?').get(user.id);
+    db.prepare('UPDATE users SET credits = ?, updated_at = ? WHERE id = ?').run(current.credits + cost, ts, user.id);
+    db.prepare(`
+      INSERT INTO credit_transactions (id, user_id, amount, balance_before, balance_after, type, reference, note, created_at)
+      VALUES (?, ?, ?, ?, ?, 'refund', ?, ?, ?)
+    `).run(uuidv4(), user.id, cost, current.credits, current.credits + cost, request.model, `文本生成失败退款: ${error.message}`, ts);
+    logAiUsage(user.id, provider || 'unknown', request.model, 0, 'failed');
+    throw error;
+  }
+}, { auth: true });
 
 // ==================== PROJECT COMMANDS (auth required) ====================
 
